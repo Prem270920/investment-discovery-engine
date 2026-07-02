@@ -1,0 +1,26 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Environment / secrets
+.env
+*.env
+
+# Database (we commit schema, never the data file)
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node (for later, when we add the frontend)
+node_modules/
+frontend/dist/
