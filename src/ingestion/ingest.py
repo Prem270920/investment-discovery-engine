@@ -28,6 +28,7 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     datefmt="%H:%M:%S",
 )
+logger = logging.getLogger("ingestion")
 
 SAMPLE_TICKERS = ["VAS.AX", "CBA.AX", "VOO", "AAPL", "IVV.AX", "IVV"]
 
@@ -89,4 +90,86 @@ def _fetch_with_retry(symbol: str) -> dict:
             ) from second_error
         
 
-        
+def ingest(tickers: list[str]) -> tuple[list[NormalizedAsset], dict[str, list[str]]]:
+    """Ingest a list of tickers into clean NormalizedAsset records.
+
+    Returns:
+        (assets, failures) where failures maps a category to a list of
+            'fetch'      -> couldn't get usable data from yfinance (after retry)
+            'validation' -> data came back but our normalizer rejected it
+    """      
+
+    assets: list[NormalizedAsset] = []
+    failures: dict[str, list[str]] = {"fetch": [], "validation": []}
+
+    for symbol in tickers:
+        logger.info("ingesting %s ...", symbol)
+
+        # Stage 1: fetch (with one retry)
+        try:
+            raw = _fetch_with_retry(symbol)
+        except FetchError as exc:
+            logger.error("FETCH FAILED: %s", exc)
+            failures["fetch"].append(str(exc))
+            continue
+
+        # Stage 2: normalize/validate
+        try:
+            asset = normalize_asset(raw)
+        except AssetValidationError as exc:
+            logger.error("REJECTED: %s", exc)
+            failures["validation"].append(str(exc))
+            continue
+
+        assets.append(asset)
+
+        for warning in asset.data_warnings:
+            logger.warning("  data warning [%s]: %s", asset.symbol, warning)
+
+    return assets, failures
+
+def _print_summary(
+    tickers: list[str],
+    assets: list[NormalizedAsset],
+    failures: dict[str, list[str]]) -> None:
+    
+    total = len(tickers)
+    ok = len(assets)
+    fetch_failed = len(failures["fetch"])
+    rejected = len(failures["validation"])
+
+    print("\n" + "=" * 60)
+    print("INGESTION RUN SUMMARY")
+    print("=" * 60)
+    print(f"  requested : {total}")
+    print(f"  succeeded : {ok}")
+    print(f"  fetch fail: {fetch_failed}")
+    print(f"  rejected  : {rejected}")
+
+    if failures["fetch"]:
+        print("\n  Fetch failures:")
+        for reason in failures["fetch"]:
+            print(f"    - {reason}")
+    if failures["validation"]:
+        print("\n  Validation rejections:")
+        for reason in failures["validation"]:
+            print(f"    - {reason}")
+
+    print("\n  Clean assets:")
+    for a in assets:
+        warn_flag = f"  ⚠ {len(a.data_warnings)} warning(s)" if a.data_warnings else ""
+        print(f"    {a.symbol:<8} {a.quote_type:<7} "
+              f"underlying={a.underlying_market:<6} "
+              f"close={a.latest_close:<10.2f}{warn_flag}")
+    print("=" * 60)
+
+def main() -> None:
+    logger.info("starting ingestion run for %d tickers", len(SAMPLE_TICKERS))
+    assets, failures = ingest(SAMPLE_TICKERS)
+    _print_summary(SAMPLE_TICKERS, assets, failures)
+    logger.info("ingestion run complete: %d clean assets", len(assets))
+
+
+if __name__ == "__main__":
+    main()
+
