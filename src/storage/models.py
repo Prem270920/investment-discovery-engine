@@ -75,10 +75,8 @@ class Price(Base):
 
     asset: Mapped["Asset"] = relationship(back_populates="prices")
 
-    # A double-run or bug CANNOT create duplicates.
-    __table_args__ = (
-    UniqueConstraint("symbol", "date", name="uq_symbol_date"),
-    )
+    # A double-run or bug CANNOT create duplicates
+    __table_args__ = (UniqueConstraint("symbol", "date", name="uq_symbol_date"),)
 
     def __repr__(self) -> str:
         return f"<Price {self.symbol} {self.date} close={self.close}>"

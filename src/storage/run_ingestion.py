@@ -80,3 +80,74 @@ def _fetch_with_retry(symbol: str):
                 f"({type(second_error).__name__}: {second_error})"
             ) from second_error
         
+def run() -> None:
+    # Create tables if they don't exist yet
+    # This is safe to call multiple times, and is idempotent.
+    # it only creates what's missing, never drops or overwrites.
+    Base.metadata.create_all(engine)
+    logger.info("tables ensured (assets, prices)")
+
+    failures = {"fetch": [], "validation": []}
+    assets_stored = 0
+    prices_inserted = 0
+
+    session = SessionLocal()
+    try:
+        for symbol in SAMPLE_TICKERS:
+            logger.info("processing %s ...", symbol)
+
+            # --- fetch ---
+            try:
+                raw, history = _fetch_with_retry(symbol)
+            except FetchError as exc:
+                logger.error("FETCH FAILED: %s", exc)
+                failures["fetch"].append(str(exc))
+                continue
+
+            # --- normalize ---
+            try:
+                asset = normalize_asset(raw)
+            except AssetValidationError as exc:
+                logger.error("REJECTED: %s", exc)
+                failures["validation"].append(str(exc))
+                continue
+
+            for w in asset.data_warnings:
+                logger.warning("  data warning [%s]: %s", asset.symbol, w)
+
+            # store (asset must exist before its prices, for the FK)
+            upsert_asset(session, asset)
+            session.flush()  # ensure the asset row is visible for the FK
+            prices_inserted += insert_new_prices(session, asset.symbol, history)
+            assets_stored += 1
+
+        # One commit for the whole run — atomic.
+        session.commit()
+        logger.info("committed: %d assets, %d new price bars",
+                    assets_stored, prices_inserted)
+        
+    except Exception:
+        session.rollback()
+        logger.exception("run failed — rolled back, no partial data written")
+        raise
+    finally:
+        session.close()
+
+
+    # summary 
+    print("\n" + "=" * 60)
+    print("PERSISTENCE RUN SUMMARY")
+    print("=" * 60)
+    print(f"  assets stored/updated : {assets_stored}")
+    print(f"  new price bars inserted: {prices_inserted}")
+    print(f"  fetch failures         : {len(failures['fetch'])}")
+    print(f"  validation rejections  : {len(failures['validation'])}")
+    for reason in failures["fetch"]:
+        print(f"    fetch: {reason}")
+    for reason in failures["validation"]:
+        print(f"    reject: {reason}")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    run()
