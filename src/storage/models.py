@@ -77,7 +77,8 @@ class Price(Base):
 
     # A double-run or bug CANNOT create duplicates.
     __table_args__ = (
-    UniqueConstraint("symbol", "date", name="uq_symbol_date"),)
+    UniqueConstraint("symbol", "date", name="uq_symbol_date"),
+    )
 
     def __repr__(self) -> str:
         return f"<Price {self.symbol} {self.date} close={self.close}>"
