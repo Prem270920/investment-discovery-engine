@@ -12,6 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -42,6 +43,11 @@ class Asset(Base):
     trailing_pe: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     latest_close: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # True for reference series (^AXJO, ^GSPC) used only for beta computation.
+    # These are stored like assets (so their price bars satisfy the prices FK)
+    # but filtered out of anything a user browses.
+    is_benchmark: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     last_updated: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -80,3 +86,30 @@ class Price(Base):
 
     def __repr__(self) -> str:
         return f"<Price {self.symbol} {self.date} close={self.close}>"
+    
+
+class AssetMetric(Base):
+    """Computed risk metrics for one asset in separate table — recomputed each ingestion run.
+
+    `beta` here is OUR computed beta (covariance / benchmark variance)
+    """
+    __tablename__ = "asset_metrics"
+
+    symbol: Mapped[str] = mapped_column(String, ForeignKey("assets.symbol"), primary_key=True)
+
+    annualized_volatility: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sharpe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    beta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    benchmark_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    asset: Mapped["Asset"] = relationship()
+
+    def __repr__(self) -> str:
+        return (
+            f"<AssetMetric {self.symbol} vol={self.annualized_volatility} "
+            f"sharpe={self.sharpe_ratio} beta={self.beta} vs {self.benchmark_symbol}>"
+        )
