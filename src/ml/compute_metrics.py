@@ -21,6 +21,7 @@ from src.storage.models import Asset, AssetMetric, Price
 
 logger = logging.getLogger("compute_metrics")
 
+
 # Which benchmark represents each underlying market.
 MARKET_TO_BENCHMARK = {
     "AU": "^AXJO",
@@ -46,39 +47,71 @@ def compute_and_store_metrics(session: Session) -> int:
 
     Returns the number of assets whose metrics were computed.
     """
-
-    # Pre-load benchmark return series once
+    # Pre-load benchmark WEEKLY returns once
     benchmark_returns: dict[str, pd.Series] = {}
     for market, bench_symbol in MARKET_TO_BENCHMARK.items():
         closes = _load_close_series(session, bench_symbol)
         if not closes.empty:
-            benchmark_returns[bench_symbol] = risk_metrics.daily_returns(closes)
+            # Benchmark returns are used ONLY for beta, so store them WEEKLY
+            # (W-FRI) to fix cross-market date misalignment. See weekly_returns().
+            benchmark_returns[bench_symbol] = risk_metrics.weekly_returns(closes)
         else:
             logger.warning(
                 "benchmark %s has no price data; beta unavailable for %s assets",
                 bench_symbol, market,
             )
 
-    # skip benchmarks themselves
-    assets = session.scalars(select(Asset).where(Asset.is_benchmark == False)).all()
+    # Only compute for real, browsable assets — skip benchmarks
+    assets = session.scalars(
+        select(Asset).where(Asset.is_benchmark == False)  # noqa: E712
+    ).all()
 
     computed = 0
     for asset in assets:
         closes = _load_close_series(session, asset.symbol)
-        rets = risk_metrics.daily_returns(closes)
+        daily_rets = risk_metrics.daily_returns(closes)
 
-        if rets.empty:
+        if daily_rets.empty:
             logger.warning("%s: no returns; skipping metrics", asset.symbol)
             continue
 
-        vol = risk_metrics.annualized_volatility(rets)
+        # Volatility & Sharpe: DAILY returns 
+        vol = risk_metrics.annualized_volatility(daily_rets)
         rf = risk_metrics.risk_free_for_market(asset.underlying_market)
-        sharpe = risk_metrics.sharpe_ratio(rets, risk_free_annual=rf)
+        sharpe = risk_metrics.sharpe_ratio(daily_rets, risk_free_annual=rf)
 
-        # Beta vs the benchmark for this asset's UNDERLYING market.
+        # Beta: WEEKLY returns, in the asset's OWN currency
+        #
+        # DELIBERATE DESIGN DECISION (see README):
+        # For cross-currency assets (e.g. IVV.AX: AUD-priced, US underlying), we
+        # report the beta an investor ACTUALLY EXPERIENCES in their own currency,
+        # NOT a currency-stripped "pure underlying exposure" figure.
+        #
+        # Why: IVV.AX holds the S&P 500, so its currency-stripped beta "should"
+        # be ~1.0. But an unhedged AUD investor does NOT get 1:1 S&P exposure —
+        # AUD/USD movements partially offset the underlying's moves, diluting the
+        # relationship to ~0.33. That dilution is REAL, not an artifact.
+        #
+        # attempted currency-stripping (converting AUD closes to USD via
+        # AUDUSD=X) and could only recover beta to ~0.67, not ~1.0. Diagnosis:
+        # yfinance's daily FX bar and the ASX equity close are snapped at
+        # DIFFERENT times of day, so multiplying them removes some FX effect
+        # while injecting fresh timing noise. The free data cannot support a
+        # clean strip. Rather than tune until we got a number we'd pre-decided
+        # was "right", we report the honest, FX-inclusive figure.
+        #
+        # WEEKLY (W-FRI) resampling is retained: it genuinely does fix the
+        # cross-market TIMEZONE misalignment (verified via a lag test — lag 0 is
+        # optimal, so the weekly buckets are correctly aligned).
         bench_symbol = MARKET_TO_BENCHMARK.get(asset.underlying_market)
         bench_rets = benchmark_returns.get(bench_symbol)
-        asset_beta = (risk_metrics.beta(rets, bench_rets) if bench_rets is not None else None)
+
+        weekly_rets = risk_metrics.weekly_returns(closes)
+        asset_beta = (
+            risk_metrics.beta(weekly_rets, bench_rets)
+            if bench_rets is not None else None
+        )
+        
 
         # Upsert the metrics row
         existing = session.get(AssetMetric, asset.symbol)
@@ -109,5 +142,3 @@ def compute_and_store_metrics(session: Session) -> int:
         computed += 1
 
     return computed
-
-
