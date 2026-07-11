@@ -17,6 +17,9 @@ import pandas as pd
 # 252 trading days in a year
 TRADING_DAYS_PER_YEAR = 252
 
+# 52 weeks in a year — annualization factor for weekly-interval metrics.
+TRADING_WEEKS_PER_YEAR = 52
+
 # Fixed per-market risk-free rates (annual)
 RISK_FREE_RATES = {
     "AU": 0.0435,   # ~RBA cash rate proxy
@@ -36,6 +39,39 @@ def daily_returns(close_prices: pd.Series) -> pd.Series:
         return pd.Series(dtype="float64")
     returns = close_prices.pct_change().dropna()
     return returns
+
+def weekly_returns(close_prices: pd.Series) -> pd.Series:
+    """Weekly (week-ending-Friday) returns from a series of closing prices.
+
+    beta aligns TWO price series across markets. ASX and US trade on different calendars AND timezones.
+    the ASX close for a given calendar day reflects information ~a day out of sync with the US close.
+    Joining daily returns across markets therefore misaligns them and collapses beta toward zero 
+
+    Resampling to weekly makes that sub-daily offset negligible: being one day
+    off barely matters across a 5-day window.
+
+    Note: this is used ONLY for beta. Volatility and Sharpe stay on daily data
+    (they use a single asset's own returns, so no cross-market alignment issue).
+    """
+    if close_prices is None or len(close_prices) < 2:
+        return pd.Series(dtype="float64")
+    # 'W-FRI' = week ending Friday. last() takes each week's final close.
+    weekly_close = close_prices.resample("W-FRI").last().dropna()
+    if len(weekly_close) < 2:
+        return pd.Series(dtype="float64")
+    return weekly_close.pct_change().dropna()
+
+def convert_to_usd(aud_close: pd.Series, audusd_close: pd.Series) -> pd.Series:
+    """Convert an AUD-priced series to USD using the AUD/USD rate.
+
+    *** CURRENTLY UNUSED — retained for documentation. ***
+    We built this to currency-strip cross-listed ETFs (IVV.AX) so their beta
+    would reflect pure underlying exposure. It only recovered beta from 0.33 to
+    0.67, not the expected ~1.0, because yfinance's daily FX bar and the ASX
+    equity close are snapped at different times of day, so the multiplication
+    removes some FX effect while injecting timing noise. We chose instead to
+    report the honest FX-inclusive beta. See compute_metrics.py and the README.
+    """
 
 def annualized_volatility(returns: pd.Series) -> float | None:
     """Annualized standard deviation of daily returns.
