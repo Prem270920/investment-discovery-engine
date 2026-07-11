@@ -26,6 +26,9 @@ logger = logging.getLogger("benchmarks")
 BENCHMARKS = {
     "^AXJO": {"name": "S&P/ASX 200", "market": "AU", "currency": "AUD"},
     "^GSPC": {"name": "S&P 500", "market": "US", "currency": "USD"},
+    # FX rate series — not a benchmark for beta, but a reference series needed
+    # to currency-strip AUD-priced assets that track US underlyings (IVV.AX).
+    "AUDUSD=X": {"name": "AUD/USD Exchange Rate", "market": "FX", "currency": "USD"},
 }
 
 HISTORY_PERIOD = "1y"
