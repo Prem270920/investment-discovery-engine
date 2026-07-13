@@ -1,0 +1,82 @@
+
+# THE CURATED ASSET UNIVERSE
+
+
+# SELECTION CRITERIA: assets are deliberately spread across the RISK SPECTRUM
+# so that clustering has genuine structure to find. If every asset were a
+# low-vol broad-market ETF, KMeans would find no meaningful separation.
+
+assets:
+  # Bonds / defensive: anchors the low-volatility end
+  - {symbol: VAF.AX,  category: bond,    note: Vanguard Australian Fixed Interest}
+  - {symbol: VGB.AX,  category: bond,    note: Vanguard Australian Government Bond}
+  - {symbol: IAF.AX,  category: bond,    note: iShares Core Composite Bond}
+  - {symbol: BND,     category: bond,    note: Vanguard Total Bond Market}
+  - {symbol: AGG,     category: bond,    note: iShares Core US Aggregate Bond}
+  - {symbol: TLT,     category: bond,    note: iShares 20+ Year Treasury (long duration)}
+  - {symbol: SHY,     category: bond,    note: iShares 1-3 Year Treasury (very low vol)}
+
+  # Broad-market ETFs (Australia)
+  - {symbol: VAS.AX,  category: broad_etf, note: Vanguard Australian Shares (ASX 300)}
+  - {symbol: A200.AX, category: broad_etf, note: BetaShares Australia 200}
+  - {symbol: STW.AX,  category: broad_etf, note: SPDR ASX 200}
+  - {symbol: VHY.AX,  category: broad_etf, note: Vanguard Australian Shares High Yield}
+  - {symbol: VAP.AX,  category: broad_etf, note: Vanguard Australian Property (REIT)}
+  - {symbol: MVW.AX,  category: broad_etf, note: VanEck Australian Equal Weight}
+
+  # Broad-market ETFs (US)
+  - {symbol: VOO,     category: broad_etf, note: Vanguard S&P 500}
+  - {symbol: IVV,     category: broad_etf, note: iShares Core S&P 500}
+  - {symbol: VTI,     category: broad_etf, note: Vanguard Total Stock Market}
+  - {symbol: QQQ,     category: broad_etf, note: Invesco NASDAQ 100}
+  - {symbol: DIA,     category: broad_etf, note: SPDR Dow Jones}
+  - {symbol: IWM,     category: broad_etf, note: iShares Russell 2000 (small cap)}
+
+  # ASX-listed with FOREIGN underlying (the cross-market cases)
+  - {symbol: IVV.AX,  category: cross_market, note: iShares S&P 500 — US underlying}
+  - {symbol: IHVV.AX, category: cross_market, note: iShares S&P 500 AUD-HEDGED — tests the FX story}
+  - {symbol: NDQ.AX,  category: cross_market, note: BetaShares NASDAQ 100 — US underlying}
+  - {symbol: VTS.AX,  category: cross_market, note: Vanguard US Total Market — US underlying}
+  - {symbol: VGS.AX,  category: cross_market, note: Vanguard MSCI World ex-Australia — GLOBAL}
+  - {symbol: IOO.AX,  category: cross_market, note: iShares Global 100 — GLOBAL}
+  - {symbol: VEU.AX,  category: cross_market, note: Vanguard All-World ex-US — GLOBAL}
+  - {symbol: VGE.AX,  category: cross_market, note: Vanguard Emerging Markets — GLOBAL}
+
+  # Global exposure (US-listed)
+  - {symbol: VXUS,    category: global_etf, note: Vanguard Total International Stock}
+  - {symbol: VEA,     category: global_etf, note: Vanguard Developed Markets}
+  - {symbol: VWO,     category: global_etf, note: Vanguard Emerging Markets}
+
+  #  Sector ETFs: defensive vs cyclical separation
+  - {symbol: XLU,     category: sector_etf, note: Utilities (defensive)}
+  - {symbol: XLP,     category: sector_etf, note: Consumer Staples (defensive)}
+  - {symbol: XLV,     category: sector_etf, note: Healthcare (defensive)}
+  - {symbol: XLK,     category: sector_etf, note: Technology (cyclical/growth)}
+  - {symbol: XLE,     category: sector_etf, note: Energy (cyclical)}
+  - {symbol: XLF,     category: sector_etf, note: Financials (cyclical)}
+
+  #  Blue-chip stocks (Australia): moderate vol, dividend-bearing
+  - {symbol: CBA.AX,  category: blue_chip, note: Commonwealth Bank}
+  - {symbol: NAB.AX,  category: blue_chip, note: National Australia Bank}
+  - {symbol: WBC.AX,  category: blue_chip, note: Westpac}
+  - {symbol: ANZ.AX,  category: blue_chip, note: ANZ}
+  - {symbol: BHP.AX,  category: blue_chip, note: BHP (mining)}
+  - {symbol: RIO.AX,  category: blue_chip, note: Rio Tinto (mining)}
+  - {symbol: WES.AX,  category: blue_chip, note: Wesfarmers (retail)}
+  - {symbol: WOW.AX,  category: blue_chip, note: Woolworths (staples)}
+  - {symbol: TLS.AX,  category: blue_chip, note: Telstra (telco)}
+  - {symbol: CSL.AX,  category: blue_chip, note: CSL (healthcare)}
+  - {symbol: MQG.AX,  category: blue_chip, note: Macquarie (financials)}
+  - {symbol: TCL.AX,  category: blue_chip, note: Transurban (infrastructure)}
+
+  # Blue-chip stocks (US) 
+  - {symbol: JNJ,     category: blue_chip, note: Johnson & Johnson (defensive)}
+  - {symbol: PG,      category: blue_chip, note: Procter & Gamble (staples)}
+  - {symbol: KO,      category: blue_chip, note: Coca-Cola (staples)}
+  - {symbol: JPM,     category: blue_chip, note: JPMorgan (financials)}
+
+  # Growth / high-vol: gives clusters variance to work with
+  - {symbol: AAPL,    category: growth, note: Apple}
+  - {symbol: MSFT,    category: growth, note: Microsoft}
+  - {symbol: NVDA,    category: growth, note: NVIDIA (high growth/vol)}
+  - {symbol: TSLA,    category: growth, note: Tesla (high vol)}
