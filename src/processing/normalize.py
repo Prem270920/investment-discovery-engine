@@ -103,7 +103,18 @@ def normalize_asset(raw: dict) -> NormalizedAsset:
             f"{symbol}: latest_close not numeric ({latest_close!r})"
         )
 
-    quote_type = raw.get("quoteType") or "UNKNOWN"
+    # quote_type: prefer a curated override, 
+    # since yfinance misclassifies some ETFs as EQUITY (confirmed: VTS.AX, VEU.AX).
+    # We correct known-bad vendor data rather than propagate it. the override map's purpose is exactly this.
+    override = get_override(symbol)
+    vendor_quote_type = raw.get("quoteType") or "UNKNOWN"
+    quote_type = override.get("quote_type", vendor_quote_type)
+
+    if "quote_type" in override and override["quote_type"] != vendor_quote_type:
+        warnings.append(
+            f"quote_type corrected: vendor said '{vendor_quote_type}', "
+            f"override says '{quote_type}'"
+        )
     if quote_type == "UNKNOWN":
         warnings.append("quoteType missing; downstream sector/beta logic may skip")
 
