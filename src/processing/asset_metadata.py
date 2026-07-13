@@ -5,16 +5,23 @@ Curated asset metadata overrides.
 
 # symbol -> curated facts we can't reliably get from yfinance
 ASSET_OVERRIDES: dict[str, dict[str, str]] = {
-    # ASX-listed but US underlying exposure — the key edge case.
-    "IVV.AX": {"underlying_market": "US"},
-    # ASX-listed, genuinely Australian exposure (S&P/ASX 300).
-    "VAS.AX": {"underlying_market": "AU"},
-    # ASX-listed single stock, Australian company.
-    "CBA.AX": {"underlying_market": "AU"},
-    # US-listed, US exposure.
-    "VOO": {"underlying_market": "US"},
-    "AAPL": {"underlying_market": "US"},
-    "IVV": {"underlying_market": "US"},
+
+    # ASX-listed, US underlying
+    "IVV.AX":  {"underlying_market": "US"},      # tracks S&P 500
+    "IHVV.AX": {"underlying_market": "US"},      # S&P 500, AUD-hedged
+    "NDQ.AX":  {"underlying_market": "US"},      # tracks NASDAQ 100
+    "VTS.AX":  {"underlying_market": "US"},      # US total market
+
+    # ASX-listed, GLOBAL underlying
+    "VGS.AX":  {"underlying_market": "GLOBAL"},  # MSCI World ex-Australia
+    "IOO.AX":  {"underlying_market": "GLOBAL"},  # Global 100
+    "VEU.AX":  {"underlying_market": "GLOBAL"},  # All-World ex-US
+    "VGE.AX":  {"underlying_market": "GLOBAL"},  # Emerging markets
+
+    # US-listed, GLOBAL underlying
+    "VXUS":    {"underlying_market": "GLOBAL"},  # Total international
+    "VEA":     {"underlying_market": "GLOBAL"},  # Developed markets
+    "VWO":     {"underlying_market": "GLOBAL"},  # Emerging markets
 }
 
 

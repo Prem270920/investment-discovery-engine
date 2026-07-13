@@ -25,6 +25,7 @@ from src.ml.compute_metrics import compute_and_store_metrics
 from src.processing.normalize import AssetValidationError, normalize_asset
 from src.storage.database import Base, SessionLocal, engine
 from src.storage.repository import insert_new_prices, upsert_asset
+from src.ingestion.universe import load_universe
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,7 +84,7 @@ def _ingest_assets(session) -> tuple[int, int, dict]:
     assets_stored = 0
     prices_inserted = 0
 
-    for symbol in SAMPLE_TICKERS:
+    for symbol in load_universe():
         logger.info("processing asset %s ...", symbol)
         try:
             raw, history = _fetch_with_retry(symbol)
