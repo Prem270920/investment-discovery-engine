@@ -3,15 +3,13 @@ Full pipeline orchestrator
 
 The entry point that runs the complete flow in one atomic transaction:
 
-    (optionally recreate schema)
       -> ingest assets      (fetch, normalize, store)
       -> ingest benchmarks  (^AXJO, ^GSPC as is_benchmark rows)
       -> compute metrics    (volatility, Sharpe, beta from stored prices)
       -> commit once
 
-one transaction: if any stage fails, the whole run rolls back — we never
-leave the DB half-populated (e.g. assets but no metrics, or prices missing
-their benchmarks). Atomicity keeps the stored state always coherent.
+if any stage fails, the whole run rolls back — we never leave the DB half-populated 
+(e.g. assets but no metrics, or prices missing their benchmarks).
 """
 
 import argparse
@@ -26,6 +24,7 @@ from src.processing.normalize import AssetValidationError, normalize_asset
 from src.storage.database import Base, SessionLocal, engine
 from src.storage.repository import insert_new_prices, upsert_asset
 from src.ingestion.universe import load_universe
+from src.ml.clustering import cluster_and_store
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,6 +109,7 @@ def _ingest_assets(session) -> tuple[int, int, dict]:
 
     return assets_stored, prices_inserted, failures
 
+assets_clustered = 0
 
 def run(recreate: bool = False) -> None:
     if recreate:
@@ -130,6 +130,10 @@ def run(recreate: bool = False) -> None:
         # Stage 3: compute metrics from everything now staged
         metrics_computed = compute_and_store_metrics(session)
 
+        # Stage 4: cluster assets on their computed metrics.
+        session.flush()
+        assets_clustered = cluster_and_store(session)
+
         # One commit for the entire run — atomic.
         session.commit()
         logger.info("committed full pipeline run")
@@ -148,6 +152,7 @@ def run(recreate: bool = False) -> None:
     print(f"  asset price bars added : {prices_inserted}")
     print(f"  benchmark bars added   : {benchmark_bars}")
     print(f"  metrics computed       : {metrics_computed}")
+    print(f"  assets clustered       : {assets_clustered}")
     print(f"  fetch failures         : {len(failures['fetch'])}")
     print(f"  validation rejections  : {len(failures['validation'])}")
     for reason in failures["fetch"]:
