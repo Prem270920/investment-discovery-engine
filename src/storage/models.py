@@ -16,6 +16,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Float,
+    Integer,
     ForeignKey,
     String,
     UniqueConstraint,
@@ -101,6 +102,10 @@ class AssetMetric(Base):
     sharpe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
     beta: Mapped[float | None] = mapped_column(Float, nullable=True)
     benchmark_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Clustering output — recomputed each run.
+    cluster_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cluster_label: Mapped[str | None] = mapped_column(String, nullable=True)
 
     computed_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
