@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 from src.api.schemas import (
     AssetDetail,
     AssetSummary,
+    Carousel,
+    CarouselsResponse,
     HealthStatus,
     PriceHistory,
     PricePoint,
@@ -40,7 +42,7 @@ app = FastAPI(
 )
 
 
-# --- Database dependency ---
+# Database dependency
 def get_db():
     """Yield a DB session per request, always closed afterwards.
 
@@ -55,7 +57,7 @@ def get_db():
         db.close()
 
 
-# --- Helper: join an Asset with its computed metrics ---
+# Helper: join an Asset with its computed metrics
 def _asset_with_metrics(db: Session, asset: Asset) -> dict:
     """Flatten an Asset + its AssetMetric into one dict.
 
@@ -128,6 +130,104 @@ def health(db: Session = Depends(get_db)) -> HealthStatus:
         benchmark_count=benchmark_count,
         metrics_last_computed=last_computed,
         warnings=warnings,
+    )
+
+@app.get("/api/carousels", response_model=CarouselsResponse, tags=["discovery"])
+def get_carousels(
+    db: Session = Depends(get_db),
+    underlying_market: str | None = Query(None, description="Filter each carousel to one market: AU, US, or GLOBAL"),
+    min_size: int = Query(
+        1, ge=1,
+        description="Only return carousels with at least this many assets "
+                    "(after filtering) — hides stub clusters",
+    ),
+) -> CarouselsResponse:
+    """The Netflix-style discovery dashboard: assets grouped into named, ML-derived risk carousels.
+
+    Each carousel is a KMeans cluster (see clustering.py), labelled by ranking
+    clusters against each other. Assets within a carousel are ranked by Sharpe
+    ratio (best risk-adjusted return first) - the most useful ordering for a beginner deciding where to start.
+
+    This is the endpoint we deferred a step before KMeans cluster: it now serves real learned
+    categories rather than hand-written threshold filters.
+    """
+    market = underlying_market.upper() if underlying_market else None
+
+    # Pull every clustered, browsable asset with its metrics in one query
+    stmt = (
+        select(Asset, AssetMetric)
+        .join(AssetMetric, Asset.symbol == AssetMetric.symbol)
+        .where(
+            Asset.is_benchmark == False,
+            AssetMetric.cluster_id.isnot(None),
+        )
+    )
+    if market:
+        stmt = stmt.where(Asset.underlying_market == market)
+
+    rows = db.execute(stmt).all()
+
+    # Group rows by cluster. We track full cluster size SEPARATELY,
+    # so a market-filtered view can still say "showing N of TOTAL".
+    from collections import defaultdict
+    grouped: dict[int, list] = defaultdict(list)
+    for asset, metric in rows:
+        grouped[metric.cluster_id].append((asset, metric))
+
+    # Full cluster sizes + label + centroid
+    meta_rows = db.execute(
+        select(
+            AssetMetric.cluster_id,
+            AssetMetric.cluster_label,
+            func.count().label("size"),
+            func.avg(AssetMetric.annualized_volatility),
+            func.avg(AssetMetric.sharpe_ratio),
+            func.avg(AssetMetric.beta),
+        )
+        .where(AssetMetric.cluster_id.isnot(None))
+        .group_by(AssetMetric.cluster_id, AssetMetric.cluster_label)
+    ).all()
+    cluster_meta = {
+        r[0]: {"label": r[1], "size": r[2], "vol": r[3], "sharpe": r[4], "beta": r[5]}
+        for r in meta_rows
+    }
+
+    carousels: list[Carousel] = []
+    for cluster_id, members in grouped.items():
+        if len(members) < min_size:
+            continue  # hide stub carousels
+
+        meta = cluster_meta.get(cluster_id, {})
+
+        # Rank within the carousel by Sharpe, best first
+        members.sort(
+            key=lambda pair: (
+                pair[1].sharpe_ratio if pair[1].sharpe_ratio is not None else -1e9
+            ),
+            reverse=True,
+        )
+
+        summaries = [
+            AssetSummary(**_asset_with_metrics(db, asset)) for asset, _ in members
+        ]
+
+        carousels.append(Carousel(
+            label=meta.get("label") or f"Cluster {cluster_id}",
+            cluster_id=cluster_id,
+            size=meta.get("size", len(members)),
+            avg_volatility=meta.get("vol"),
+            avg_sharpe=meta.get("sharpe"),
+            avg_beta=meta.get("beta"),
+            assets=summaries,
+        ))
+
+    # Order carousels low-risk to high-risk (by avg volatility) so the dashboard
+    # reads intuitively from "safe" at the top to "growth" lower down.
+    carousels.sort(key=lambda c: c.avg_volatility if c.avg_volatility is not None else 0)
+
+    return CarouselsResponse(
+        carousels=carousels,
+        underlying_market_filter=market,
     )
 
 
