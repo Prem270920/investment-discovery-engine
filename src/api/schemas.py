@@ -68,3 +68,20 @@ class HealthStatus(BaseModel):
     benchmark_count: int
     metrics_last_computed: datetime | None = None
     warnings: list[str] = []
+
+
+class Carousel(BaseModel):
+    """One themed row in the Netflix-style UI — a cluster, surfaced as a "carousel" of assets."""
+    label: str
+    cluster_id: int
+    size: int
+    avg_volatility: float | None = None
+    avg_sharpe: float | None = None
+    avg_beta: float | None = None
+    assets: list[AssetSummary] # ranked, best Sharpe first
+
+
+class CarouselsResponse(BaseModel):
+    """The full set of carousels — the discovery dashboard payload."""
+    carousels: list[Carousel]
+    underlying_market_filter: str | None = None  # echoes any filter applied
