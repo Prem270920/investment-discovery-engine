@@ -29,6 +29,8 @@ from src.api.schemas import (
 from src.storage.database import SessionLocal
 from src.storage.models import Asset, AssetMetric, Price
 
+from fastapi.middleware.cors import CORSMiddleware
+
 logger = logging.getLogger("api")
 
 app = FastAPI(
@@ -39,6 +41,17 @@ app = FastAPI(
         "**Educational tool — not financial advice.**"
     ),
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
