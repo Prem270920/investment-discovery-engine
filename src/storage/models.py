@@ -107,6 +107,9 @@ class AssetMetric(Base):
     cluster_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cluster_label: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Risk tier — quantile-based (quintile) bucket of annualized volatility across the universe, computed each run
+    risk_tier: Mapped[str | None] = mapped_column(String, nullable=True)
+
     computed_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
