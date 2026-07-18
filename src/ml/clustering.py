@@ -1,50 +1,28 @@
 """
-KMeans clustering
+Clustering Inference — assign assets to the pre-trained model's clusters
 
-WHAT THIS DOES: groups assets by Risk behaviour (volatility, Sharpe, beta, dividend yield)
+This no longer fits anything. It LOADS the model trained by train_clusters.py
+and uses scaler.transform() + model.predict() to assign each asset to an
+existing cluster. Same model + similar data to stable, reproducible carousels.
 
-FEATURES — deliberately EXCLUDING quote_type, underlying_market, and sector.
-
-k=6 chosen based on study. Silhouette peaked at k=6 (0.326), but the curve was flat (0.29-0.33) 
-so compared k=4/5/6 and chose k=6 because it is the ONLY k where:
-  * the bond cluster stays PURE (k=4 and k=5 pollute it with XLE, XLU, PG —
-    a "Safe & Stable" carousel containing an energy ETF would mislead beginners)
-  * the market-neutral cluster (beta = -0.06) survives at all
+Risk tiers (quintile buckets of volatility) are computed here, not from the model
 """
 
 import logging
 
 import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.ml.model_store import FEATURES, load_model
 from src.storage.models import Asset, AssetMetric
 
 logger = logging.getLogger("clustering")
 
-FEATURES = [
-    "annualized_volatility",
-    "sharpe_ratio",
-    "beta",
-    "dividend_yield",
-]
+RISK_TIER_LABELS = ["Very low", "Low", "Moderate", "High", "Very high"]
 
-N_CLUSTERS = 6
-RANDOM_STATE = 42
 
-#cluster size threshold for filtering out small clusters (e.g. 1-2 assets) that are not meaningful
-MIN_CLUSTER_SIZE = 1
-
-# Sharpe must be genuinely negative to earn the "underperformers" label.
-UNDERPERFORMER_SHARPE_CEILING = 0.0
-
-FALLBACK_LABEL = "Diversified Mix"
-
-def _load_features(session: Session):
-    """Load the feature matrix for all non-benchmark assets."""
+def _load_features(session: Session) -> pd.DataFrame:
     rows = session.execute(
         select(
             Asset.symbol,
@@ -58,12 +36,10 @@ def _load_features(session: Session):
     ).all()
 
     df = pd.DataFrame(rows, columns=["symbol"] + FEATURES)
-
-    # dividend_yield: null means the asset pays NO dividend.
-    n_missing_yield = int(df["dividend_yield"].isna().sum())
+    n_missing = int(df["dividend_yield"].isna().sum())
     df["dividend_yield"] = df["dividend_yield"].fillna(0.0)
-    if n_missing_yield:
-        logger.info("imputed dividend_yield=0 for %d non-paying assets", n_missing_yield)
+    if n_missing:
+        logger.info("imputed dividend_yield=0 for %d non-paying assets", n_missing)
 
     incomplete = df[df[FEATURES].isna().any(axis=1)]
     if not incomplete.empty:
@@ -73,120 +49,64 @@ def _load_features(session: Session):
         )
     return df.dropna(subset=FEATURES).reset_index(drop=True)
 
-def _label_clusters(centroids: pd.DataFrame) -> dict[int, str]:
-    """Assign human labels by ranking clusters against each other.
 
-    Each label is claimed by exactly one cluster. Anything unclaimed gets an honest fallback and a WARNING
-    """
+def _assign_risk_tiers(df: pd.DataFrame) -> pd.Series:
+    """Quintile risk tiers by volatility — relative to the current universe."""
+    try:
+        return pd.qcut(
+            df["annualized_volatility"], q=len(RISK_TIER_LABELS),
+            labels=RISK_TIER_LABELS, duplicates="drop",
+        ).astype(str)
+    except ValueError:
+        logger.warning("could not compute quantile risk tiers (too few values)")
+        return pd.Series(["Unknown"] * len(df), index=df.index)
 
-    labels: dict[int, str] = {}
-    claimed: set[int] = set()
 
-    def claim(cluster_id: int, label: str) -> None:
-        if cluster_id not in claimed:
-            labels[cluster_id] = label
-            claimed.add(cluster_id)
-
-    # UNDERPERFORMERS: genuinely negative Sharpe.
-    worst_sharpe = centroids["sharpe_ratio"].idxmin()
-    if centroids.loc[worst_sharpe, "sharpe_ratio"] < UNDERPERFORMER_SHARPE_CEILING:
-        claim(worst_sharpe, "Recent Underperformers")
-
-    # SAFE & STEADY — lowest volatility among the rest
-    unclaimed = centroids.drop(index=list(claimed))
-    if not unclaimed.empty:
-        claim(unclaimed["annualized_volatility"].idxmin(), "Safe & Steady")
-
-    # MARKET-NEUTRAL — beta closest to zero
-    unclaimed = centroids.drop(index=list(claimed))
-    if not unclaimed.empty:
-        claim(unclaimed["beta"].abs().idxmin(), "Market-Neutral Defensives")
-
-    # HIGHER-RISK GROWTH — highest BETA
-    unclaimed = centroids.drop(index=list(claimed))
-    if not unclaimed.empty:
-        claim(unclaimed["beta"].idxmax(), "Higher-Risk Growth")
-
-    # INCOME GENERATORS — highest dividend yield
-    unclaimed = centroids.drop(index=list(claimed))
-    if not unclaimed.empty:
-        claim(unclaimed["dividend_yield"].idxmax(), "Income Generators")
-
-    # BROAD MARKET CORE — the largest remaining cluster.
-    unclaimed = centroids.drop(index=list(claimed))
-    if not unclaimed.empty:
-        claim(unclaimed["size"].idxmax(), "Broad Market Core")
-
-    # Anything still unlabelled gets an honest fallback + a warning
-    for cluster_id in centroids.index:
-        if cluster_id not in labels:
-            labels[cluster_id] = FALLBACK_LABEL
-            logger.warning(
-                "cluster %d matched no labelling rule; using fallback '%s' "
-                "(centroid: vol=%.3f sharpe=%.3f beta=%.3f yield=%.2f) "
-                "— review candidate",
-                cluster_id, FALLBACK_LABEL,
-                centroids.loc[cluster_id, "annualized_volatility"],
-                centroids.loc[cluster_id, "sharpe_ratio"],
-                centroids.loc[cluster_id, "beta"],
-                centroids.loc[cluster_id, "dividend_yield"],
-            )
-
-    return labels
-
-def cluster_and_store(session: Session):
-    """Cluster all assets and persist cluster_id + cluster_label
-
-    Returns the number of assets assigned to a cluster.
-    """
+def cluster_and_store(session: Session) -> int:
+    """Assign every asset to the PRE-TRAINED model's clusters and persist."""
     df = _load_features(session)
-    if len(df) < N_CLUSTERS:
-        logger.error(
-            "only %d assets with complete metrics — cannot form %d clusters",
-            len(df), N_CLUSTERS,
-        )
+    if df.empty:
+        logger.error("no assets with complete metrics; skipping clustering")
         return 0
 
-    X = df[FEATURES].values
+    artifact = load_model()
+    scaler = artifact["scaler"]
+    model = artifact["model"]
+    labels = artifact["labels"]
 
-    # scaling
-    X_scaled = StandardScaler().fit_transform(X)
-    km = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE, n_init=10)
-    df["cluster_id"] = km.fit_predict(X_scaled)
-
-    sil = silhouette_score(X_scaled, df["cluster_id"])
     logger.info(
-        "clustered %d assets into %d groups (silhouette %.4f)",
-        len(df), N_CLUSTERS, sil,
+        "loaded model trained %s (silhouette %.4f)",
+        artifact.get("trained_at", "?"), artifact.get("silhouette", float("nan")),
     )
 
-    centroids = df.groupby("cluster_id")[FEATURES].mean()
-    centroids["size"] = df.groupby("cluster_id").size()
+    # INFERENCE: transform (not fit_transform), predict (not fit_predict)
+    X_scaled = scaler.transform(df[FEATURES].values)
+    df["cluster_id"] = model.predict(X_scaled)
 
-    labels = _label_clusters(centroids)
+    # Risk tiers — computed fresh each run
+    df["risk_tier"] = _assign_risk_tiers(df)
 
-    # Persist.
+    tier_summary = (
+        df.groupby("risk_tier", observed=True)["annualized_volatility"]
+        .agg(["count", "min", "max"]).reindex(RISK_TIER_LABELS).dropna()
+    )
+    for tier, stats in tier_summary.iterrows():
+        logger.info("  risk tier '%s': %d assets, vol %.3f-%.3f",
+                    tier, int(stats["count"]), stats["min"], stats["max"])
+
     assigned = 0
     for row in df.itertuples():
         metric = session.get(AssetMetric, row.symbol)
         if metric is None:
             continue
         metric.cluster_id = int(row.cluster_id)
-        metric.cluster_label = labels[row.cluster_id]
+        metric.cluster_label = labels.get(int(row.cluster_id), "Unknown")
+        metric.risk_tier = row.risk_tier
         assigned += 1
 
-    for cluster_id in sorted(centroids.index):
-        members = df[df["cluster_id"] == cluster_id]["symbol"].tolist()
-        size = len(members)
-        visible = size >= MIN_CLUSTER_SIZE
-        logger.info(
-            "  [%s] %d assets%s: %s",
-            labels[cluster_id],
-            size,
-            "" if visible else "  (BELOW MIN_CLUSTER_SIZE — hidden)",
-            ", ".join(members),
-        )
+    for cid in sorted(df["cluster_id"].unique()):
+        members = df[df["cluster_id"] == cid]["symbol"].tolist()
+        logger.info("  [%s] %d: %s",
+                    labels.get(int(cid), "Unknown"), len(members), ", ".join(members))
 
     return assigned
-
-
