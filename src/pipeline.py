@@ -132,9 +132,12 @@ def run(recreate: bool = False) -> None:
 
         # Stage 4: cluster assets on their computed metrics.
         session.flush()
-        assets_clustered = cluster_and_store(session)
+        try:
+            assets_clustered = cluster_and_store(session)
+        except Exception as exc:
+            logger.warning("clustering skipped: %s", exc)
+            assets_clustered = 0
 
-        # One commit for the entire run — atomic.
         session.commit()
         logger.info("committed full pipeline run")
 
