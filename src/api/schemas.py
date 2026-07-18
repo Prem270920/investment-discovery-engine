@@ -30,6 +30,7 @@ class AssetSummary(BaseModel):
     sharpe_ratio: float | None = None
     beta: float | None = None
     benchmark_symbol: str | None = None
+    risk_tier: str | None = None
 
 
 class AssetDetail(AssetSummary):

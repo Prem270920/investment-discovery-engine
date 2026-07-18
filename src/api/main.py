@@ -97,6 +97,7 @@ def _asset_with_metrics(db: Session, asset: Asset) -> dict:
         "sharpe_ratio": metric.sharpe_ratio if metric else None,
         "beta": metric.beta if metric else None,
         "benchmark_symbol": metric.benchmark_symbol if metric else None,
+        "risk_tier": metric.risk_tier if metric else None, 
         "metrics_computed_at": metric.computed_at if metric else None,
     }
 
