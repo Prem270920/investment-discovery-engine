@@ -72,15 +72,15 @@ def _derive_labels(centroids: pd.DataFrame) -> dict[int, str]:
             labels[cluster_id] = label
             claimed.add(cluster_id)
 
-    # Underperformers — genuinely negative Sharpe.
-    worst = centroids["sharpe_ratio"].idxmin()
-    if centroids.loc[worst, "sharpe_ratio"] < UNDERPERFORMER_SHARPE_CEILING:
-        claim(worst, "Recent Underperformers")
+    # SAFE & STEADY first — lowest volatility
+    claim(centroids["annualized_volatility"].idxmin(), "Safe & Steady")
 
-    # Safe & Steady — lowest volatility among the rest.
+    # UNDERPERFORMERS — worst Sharpe among the REST, if genuinely negative.
     rest = centroids.drop(index=list(claimed))
     if not rest.empty:
-        claim(rest["annualized_volatility"].idxmin(), "Safe & Steady")
+        worst = rest["sharpe_ratio"].idxmin()
+        if rest.loc[worst, "sharpe_ratio"] < UNDERPERFORMER_SHARPE_CEILING:
+            claim(worst, "Recent Underperformers")
 
     #Market-Neutral — beta closest to zero.
     rest = centroids.drop(index=list(claimed))
