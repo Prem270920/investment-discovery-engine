@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { getCarousels } from "./api";
-import AssetCard from "./components/AssetCard";
+import Carousel from "./components/Carousel";
+import styles from "./App.module.css";
+import KnowledgeCard from "./components/KnowledgeCard";
 
 function App() {
   const [carousels, setCarousels] = useState(null);
   const [error, setError] = useState(null);
+  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     getCarousels()
@@ -14,25 +17,42 @@ function App() {
 
   if (error) {
     return (
-      <div style={{ padding: 20, fontFamily: "monospace", color: "crimson" }}>
-        <h2>API Error</h2>
-        <p>{error}</p>
-        <p>Is the backend running? Try: <code>uvicorn src.api.main:app --reload</code></p>
+      <div className={styles.state}>
+        <h2>Couldn't reach the data service</h2>
+        <p className={styles.stateDetail}>{error}</p>
+        <p className={styles.stateDetail}>
+          Is the backend running? <code>uvicorn src.api.main:app --reload</code>
+        </p>
       </div>
     );
   }
 
   if (!carousels) {
-    return <div style={{ padding: 20 }}>Loading carousels…</div>;
+    return <div className={styles.state}>Loading your dashboard…</div>;
   }
 
-  // render 4 cards from the first carousel to verify AssetCard styling and risk badge mapping
-  const sample = carousels[0]?.assets.slice(0, 4) ?? [];
   return (
-    <div style={{ padding: 40, display: "flex", gap: 16, flexWrap: "wrap" }}>
-      {sample.map((a) => (
-        <AssetCard key={a.symbol} asset={a} onSelect={(s) => alert(s)} />
-      ))}
+    <div className={styles.page}>
+      <header className={styles.topbar}>
+        <span className={styles.wordmark}>Discovery Engine</span>
+        <span className={styles.tagline}>
+          Educational tool — not financial advice
+        </span>
+      </header>
+
+      <main className={styles.main}>
+        {carousels.map((c) => (
+          <Carousel
+            key={c.cluster_id}
+            carousel={c}
+            onSelectAsset={setSelected}
+          />
+        ))}
+      </main>
+
+      {selected && (
+        <KnowledgeCard symbol={selected} onClose={() => setSelected(null)} />
+      )}
     </div>
   );
 }
