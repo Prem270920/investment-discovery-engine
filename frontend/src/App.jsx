@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCarousels } from "./api";
+import AssetCard from "./components/AssetCard";
 
 function App() {
   const [carousels, setCarousels] = useState(null);
@@ -25,18 +26,12 @@ function App() {
     return <div style={{ padding: 20 }}>Loading carousels…</div>;
   }
 
-  // Deliberately ugly: just prove the data arrives. Styling comes next.
+  // render 4 cards from the first carousel to verify AssetCard styling and risk badge mapping
+  const sample = carousels[0]?.assets.slice(0, 4) ?? [];
   return (
-    <div style={{ padding: 20, fontFamily: "system-ui" }}>
-      <h1>Investment Discovery Engine</h1>
-      <p>{carousels.length} carousels loaded from the API ✓</p>
-      {carousels.map((c) => (
-        <div key={c.cluster_id} style={{ marginBottom: 16 }}>
-          <h3>{c.label} <small>({c.size} assets)</small></h3>
-          <p style={{ color: "#666" }}>
-            {c.assets.map((a) => a.symbol).join(", ")}
-          </p>
-        </div>
+    <div style={{ padding: 40, display: "flex", gap: 16, flexWrap: "wrap" }}>
+      {sample.map((a) => (
+        <AssetCard key={a.symbol} asset={a} onSelect={(s) => alert(s)} />
       ))}
     </div>
   );
