@@ -1,19 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getCarousels } from "./api";
 import Carousel from "./components/Carousel";
-import styles from "./App.module.css";
 import KnowledgeCard from "./components/KnowledgeCard";
+import MarketFilter from "./components/MarketFilter";
+import styles from "./App.module.css";
 
 function App() {
   const [carousels, setCarousels] = useState(null);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [market, setMarket] = useState(null);   // null = all markets
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    getCarousels()
+  const load = useCallback((underlyingMarket) => {
+    setLoading(true);
+    // min_size=3 hides the 2-asset stub carousel from the main dashboard
+    getCarousels(underlyingMarket, 3)
       .then((data) => setCarousels(data.carousels))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(market); }, [market, load]);
+
+  const handleMarketChange = (value) => {
+    setError(null);
+    setMarket(value);
+  };
 
   if (error) {
     return (
@@ -27,10 +40,6 @@ function App() {
     );
   }
 
-  if (!carousels) {
-    return <div className={styles.state}>Loading your dashboard…</div>;
-  }
-
   return (
     <div className={styles.page}>
       <header className={styles.topbar}>
@@ -40,14 +49,28 @@ function App() {
         </span>
       </header>
 
+      <div className={styles.controls}>
+        <MarketFilter selected={market} onChange={handleMarketChange} />
+      </div>
+
       <main className={styles.main}>
-        {carousels.map((c) => (
-          <Carousel
-            key={c.cluster_id}
-            carousel={c}
-            onSelectAsset={setSelected}
-          />
-        ))}
+        {!carousels ? (
+          <div className={styles.state}>Loading your dashboard…</div>
+        ) : carousels.length === 0 ? (
+          <div className={styles.state}>
+            No assets match this market filter.
+          </div>
+        ) : (
+          <div style={{ opacity: loading ? 0.5 : 1, transition: "opacity 150ms" }}>
+            {carousels.map((c) => (
+              <Carousel
+                key={c.cluster_id}
+                carousel={c}
+                onSelectAsset={setSelected}
+              />
+            ))}
+          </div>
+        )}
       </main>
 
       {selected && (

@@ -43,3 +43,11 @@
   color: var(--ink-muted);
   font-size: 14px;
 }
+
+.controls {
+  padding: 20px 32px 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: flex-end;
+}
