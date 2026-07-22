@@ -88,6 +88,49 @@ class Price(Base):
     def __repr__(self) -> str:
         return f"<Price {self.symbol} {self.date} close={self.close}>"
     
+class Forecast(Base):
+    """A stored forecast point for one asset on one future date.
+
+    A forecast is a TIME SERIES per asset (one row per future trading day)
+    """
+    __tablename__ = "forecasts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("assets.symbol"), nullable=False, index=True
+    )
+    date: Mapped["Date"] = mapped_column(Date, nullable=False)
+
+    predicted: Mapped[float] = mapped_column(Float, nullable=False)
+    lower: Mapped[float] = mapped_column(Float, nullable=False)   # 95% CI lower
+    upper: Mapped[float] = mapped_column(Float, nullable=False)   # 95% CI upper
+
+    asset: Mapped["Asset"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("symbol", "date", name="uq_forecast_symbol_date"),
+    )
+
+
+class ForecastMeta(Base):
+    """One row per asset summarising its forecast run: which model won the
+    backtest, and how wrong it was on held-out data.
+    """
+    __tablename__ = "forecast_meta"
+
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("assets.symbol"), primary_key=True
+    )
+    method: Mapped[str] = mapped_column(String, nullable=False)      # 'returns' | 'price'
+    arima_order: Mapped[str] = mapped_column(String, nullable=False)  # e.g. '(2,1,1)'
+    backtest_error_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    horizon_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    asset: Mapped["Asset"] = relationship()
+    
 
 class AssetMetric(Base):
     """Computed risk metrics for one asset in separate table — recomputed each ingestion run.
