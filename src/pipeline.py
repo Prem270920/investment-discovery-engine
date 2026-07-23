@@ -25,6 +25,7 @@ from src.storage.database import Base, SessionLocal, engine
 from src.storage.repository import insert_new_prices, upsert_asset
 from src.ingestion.universe import load_universe
 from src.ml.clustering import cluster_and_store
+from src.ml.compute_forecasts import compute_and_store_forecasts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,8 +111,10 @@ def _ingest_assets(session) -> tuple[int, int, dict]:
     return assets_stored, prices_inserted, failures
 
 assets_clustered = 0
+forecasts_ok = 0
+forecasts_skipped = 0
 
-def run(recreate: bool = False) -> None:
+def run(recreate: bool = False, skip_forecasts: bool = False):
     if recreate:
         logger.warning("--recreate: dropping ALL tables first")
         Base.metadata.drop_all(engine)
@@ -138,6 +141,14 @@ def run(recreate: bool = False) -> None:
             logger.warning("clustering skipped: %s", exc)
             assets_clustered = 0
 
+        # Stage 5: ARIMA forecasts. Expensive (3 grid searches per asset), allowing skipping for dev/debug runs.
+        if skip_forecasts:
+            logger.info("--skip-forecasts: skipping forecast stage")
+        else:
+            session.flush()
+            logger.info("computing forecasts (this takes a few minutes)...")
+            forecasts_ok, forecasts_skipped = compute_and_store_forecasts(session)
+
         session.commit()
         logger.info("committed full pipeline run")
 
@@ -158,6 +169,8 @@ def run(recreate: bool = False) -> None:
     print(f"  assets clustered       : {assets_clustered}")
     print(f"  fetch failures         : {len(failures['fetch'])}")
     print(f"  validation rejections  : {len(failures['validation'])}")
+    print(f"  forecasts computed     : {forecasts_ok}")
+    print(f"  forecasts skipped      : {forecasts_skipped}")
     for reason in failures["fetch"]:
         print(f"    fetch: {reason}")
     for reason in failures["validation"]:
@@ -171,8 +184,12 @@ def main() -> None:
         "--recreate", action="store_true",
         help="DROP all tables before running (clean rebuild)",
     )
+    parser.add_argument(
+        "--skip-forecasts", action="store_true",
+        help="Skip the expensive ARIMA forecast stage (fast dev runs)",
+    )
     args = parser.parse_args()
-    run(recreate=args.recreate)
+    run(recreate=args.recreate, skip_forecasts=args.skip_forecasts)
 
 
 if __name__ == "__main__":
