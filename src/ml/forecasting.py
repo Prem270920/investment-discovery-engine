@@ -156,13 +156,25 @@ def forecast_asset(prices: pd.Series):
         last = float(prices.iloc[-1])
         predicted, lower, upper = [], [], []
         p_mid = last
+
+        # Per-step return uncertainty (half-width of the CI, in return units).
+        # ARIMA's per-day CI is roughly constant, so we must ACCUMULATE it:
+        # uncertainty about a 30-day-ahead price is far larger than about
+        # tomorrow's. Variance of a sum of returns grows with the number of
+        # steps, so the standard deviation grows with sqrt(n). Without this the
+        # band stays a fixed % of price and understates risk.
+        step_halfwidth = (r_ci[:, 1] - r_ci[:, 0]) / 2.0
+
+        cumulative_var = 0.0
         for i in range(HORIZON_DAYS):
             p_mid = p_mid * (1 + r_mean[i])
             predicted.append(p_mid)
-            # Bands: compound the CI bounds from the SAME running midpoint,
-            # so the band widens with horizon.
-            lower.append(p_mid * (1 + r_ci[i, 0] - r_mean[i]))
-            upper.append(p_mid * (1 + r_ci[i, 1] - r_mean[i]))
+
+            cumulative_var += float(step_halfwidth[i]) ** 2
+            cumulative_halfwidth = cumulative_var ** 0.5
+
+            lower.append(p_mid * (1 - cumulative_halfwidth))
+            upper.append(p_mid * (1 + cumulative_halfwidth))
         predicted = np.array(predicted)
         lower = np.array(lower)
         upper = np.array(upper)
