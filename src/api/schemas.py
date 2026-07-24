@@ -86,3 +86,22 @@ class CarouselsResponse(BaseModel):
     """The full set of carousels — the discovery dashboard payload."""
     carousels: list[Carousel]
     underlying_market_filter: str | None = None  # echoes any filter applied
+
+class ForecastPoint(BaseModel):
+    """One projected day: central estimate plus its uncertainty band"""
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    predicted: float
+    lower: float
+    upper: float
+
+
+class ForecastResponse(BaseModel):
+    """A stored ARIMA projection with its measured accuracy"""
+    symbol: str
+    method: str                    
+    arima_order: str
+    backtest_error_pct: float | None
+    horizon_days: int
+    points: list[ForecastPoint]

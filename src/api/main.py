@@ -22,12 +22,14 @@ from src.api.schemas import (
     AssetSummary,
     Carousel,
     CarouselsResponse,
+    ForecastPoint,
+    ForecastResponse,
     HealthStatus,
     PriceHistory,
     PricePoint,
 )
 from src.storage.database import SessionLocal
-from src.storage.models import Asset, AssetMetric, Price
+from src.storage.models import Asset, AssetMetric, Forecast, ForecastMeta, Price
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -321,4 +323,37 @@ def get_prices(
     return PriceHistory(
         symbol=asset.symbol,
         points=[PricePoint(date=r[0], close=r[1]) for r in rows],
+    )
+
+@app.get(
+    "/api/assets/{symbol}/forecast",
+    response_model=ForecastResponse,
+    tags=["assets"],
+)
+def get_forecast(symbol: str, db: Session = Depends(get_db)) -> ForecastResponse:
+    """Stored ARIMA projection for one asset, with its measured backtest error"""
+    asset = db.get(Asset, symbol.upper())
+    if asset is None or asset.is_benchmark:
+        raise HTTPException(status_code=404, detail=f"Asset '{symbol}' not found")
+
+    meta = db.get(ForecastMeta, asset.symbol)
+    if meta is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No forecast available for '{symbol}'",
+        )
+
+    rows = db.scalars(
+        select(Forecast)
+        .where(Forecast.symbol == asset.symbol)
+        .order_by(Forecast.date)
+    ).all()
+
+    return ForecastResponse(
+        symbol=asset.symbol,
+        method=meta.method,
+        arima_order=meta.arima_order,
+        backtest_error_pct=meta.backtest_error_pct,
+        horizon_days=meta.horizon_days,
+        points=[ForecastPoint.model_validate(r) for r in rows],
     )
