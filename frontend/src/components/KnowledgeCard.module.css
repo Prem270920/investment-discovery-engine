@@ -111,3 +111,11 @@
 @media (max-width: 560px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
 }
+
+.forecastNote {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--bg-deep);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
