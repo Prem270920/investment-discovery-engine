@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { getAsset, getPrices } from "../api";
 import { riskStyle } from "../risk";
 import PriceChart from "./PriceChart";
 import styles from "./KnowledgeCard.module.css";
+import { getAsset, getPrices, getForecast } from "../api";
 
 /** Plain-language explainer assembled from my own data — no NLP yet, 
  * The cross-currency beta case gets its own paragraph: the FX story is the app's best teaching moment */
@@ -51,12 +51,15 @@ function explain(asset) {
 export default function KnowledgeCard({ symbol, onClose }) {
   const [asset, setAsset] = useState(null);
   const [prices, setPrices] = useState(null);
+  const [forecast, setForecast] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let live = true;
-    Promise.all([getAsset(symbol), getPrices(symbol, 365)])
-      .then(([a, p]) => { if (live) { setAsset(a); setPrices(p.points); } })
+    Promise.all([getAsset(symbol), getPrices(symbol, 365), getForecast(symbol)])
+      .then(([a, p, f]) => {
+        if (live) { setAsset(a); setPrices(p.points); setForecast(f); }
+      })
       .catch((e) => live && setError(e.message));
     return () => { live = false; };
   }, [symbol]);
@@ -93,7 +96,34 @@ export default function KnowledgeCard({ symbol, onClose }) {
               </div>
             </header>
 
-            <PriceChart points={prices} currency={asset.currency} />
+            <PriceChart points={prices} forecast={forecast} currency={asset.currency} />
+
+            {forecast && (
+              <section className={styles.forecastNote}>
+                <h3 className={styles.explainerTitle}>The dashed projection</h3>
+                <p className={styles.para}>
+                  The dashed line projects {forecast.horizon_days} trading days ahead
+                  using an ARIMA model{" "}
+                  {forecast.method === "returns"
+                    ? "fitted to daily returns"
+                    : "fitted to prices directly"}
+                  . The shaded band shows the range of plausible outcomes — notice it
+                  gets wider the further out it goes, because uncertainty compounds.
+                </p>
+                {forecast.backtest_error_pct != null && (
+                  <p className={styles.para}>
+                    <strong>How much should you trust it?</strong> Tested on the most
+                    recent 30 days it had never seen, this model's projections were off
+                    by about{" "}
+                    <span className="tnum" style={{ color: "var(--ink)", fontWeight: 600 }}>
+                      {forecast.backtest_error_pct}%
+                    </span>
+                    {" "}on average. Treat it as an illustration of a statistical trend —
+                    not a prediction of what will happen.
+                  </p>
+                )}
+              </section>
+            )}
 
             <div className={styles.metrics}>
               <Metric label="Volatility (1y)" value={asset.annualized_volatility != null ? `${(asset.annualized_volatility * 100).toFixed(1)}%` : "—"} />
