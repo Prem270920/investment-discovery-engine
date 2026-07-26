@@ -45,3 +45,12 @@ export async function getPrices(symbol, days = 365) {
 export async function getHealth() {
   return request("/api/health");
 }
+
+/** Fetch the stored ARIMA forecast for one asset. Returns null if none exists. */
+export async function getForecast(symbol) {
+  try {
+    return await request(`/api/assets/${encodeURIComponent(symbol)}/forecast`);
+  } catch {
+    return null;
+  }
+}
