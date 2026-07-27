@@ -27,6 +27,11 @@ RISK_FREE_RATES = {
     "GLOBAL": 0.0430,  # fall back to US-like for globally-diversified assets
 }
 DEFAULT_RISK_FREE = 0.0430
+# Volatility below this is treated as zero. Exact equality (== 0) is unreliable
+# with floating point: a near-constant series produces a tiny non-zero stdev
+# (1e-19) rather than exact zero, which then divides into an absurd Sharpe
+# a test caught this returning 5.8e16 instead of None.
+NEAR_ZERO_VOLATILITY = 1e-12
 
 def daily_returns(close_prices: pd.Series) -> pd.Series:
     """Simple daily returns from a series of closing prices.
@@ -100,7 +105,7 @@ def sharpe_ratio(returns: pd.Series, risk_free_annual: float) -> float | None:
     annual_return = float(returns.mean()) * TRADING_DAYS_PER_YEAR
     annual_vol = annualized_volatility(returns)
 
-    if annual_vol is None or annual_vol == 0:
+    if annual_vol is None or annual_vol < NEAR_ZERO_VOLATILITY:
         return None
 
     return (annual_return - risk_free_annual) / annual_vol
