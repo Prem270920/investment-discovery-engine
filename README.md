@@ -157,7 +157,7 @@ The list lives in `config/universe.yaml`, so scaling up is a config change rathe
 - **Cross-currency beta is FX-inclusive.** Documented above. Fixing it properly needs FX rates snapped at market close, which the free feed doesn't provide.
 - **Risk tiers are relative to this universe.** They're quintiles, so "Very low risk" means "among the calmest fifth of the 56 assets here", not an absolute claim about the market.
 - **Cluster labels are heuristics.** Rules applied to centroids, ranked against each other. Reasonable and stable, but they're my interpretation of what the model found — the algorithm doesn't name anything.
-- **No tests.** The honest one. I verified heavily as I built — self-tests on the pure functions, control comparisons, checking the database directly — but none of it is captured as a runnable suite. It's the next thing I'd add.
+- **Tests cover the pure logic, not the full pipeline.** 31 tests on the risk metrics, the normalization layer, and the forecast uncertainty property — the places where a regression would fail silently rather than crash. Ingestion and the API are still verified by hand. `python -m pytest`
 - **SQLite.** Fine for a single batch writer. Would need Postgres for concurrent access; the ORM is there specifically so that's a connection-string change.
 
 ---
