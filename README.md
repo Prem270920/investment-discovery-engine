@@ -1,122 +1,175 @@
 # Investment Discovery Engine
 
-A beginner-friendly, "Netflix-style" discovery tool for stable, long-term
-investments across the ASX (Australia), US markets, and global ETFs.
+A browsing tool for people who want to start investing and don't know where to look. Instead of a spreadsheet with 40 columns, it groups assets into themed rows — "Safe & Steady", "Income Generators", "Higher-Risk Growth" — and explains each one in plain English.
 
-## The Problem
+The categories aren't hand-written. They come out of a clustering model trained on risk behaviour, so an energy ETF can end up sitting next to Coca-Cola if that's how they actually move.
 
-Beginners who want to invest in stable long-term assets face a wall of jargon,
-scattered data sources, and no personalized starting point. The research-and-triage
-work — pulling asset data, computing risk metrics, filtering by locality, and
-explaining each option in plain language — is manual and intimidating.
+> **This is an educational tool, not financial advice.** Nothing here is a recommendation to buy anything. The price projections in particular are illustrations of a statistical trend, not predictions — more on that below.
 
-This project automates that triage and presents the results as browsable,
-themed carousels (e.g. "Top Safe-Haven ETFs", "Stable Dividends in Australia"),
-with plain-language explainers and educational forecasts.
+---
 
-> **Not financial advice.** This is an educational discovery and literacy tool.
-> All projections are clearly labeled as educational, not personalized advice.
+## The problem I was actually solving
 
-## Architecture (Full Flow)
+If you've never invested before, the hard part isn't the buying. It's that there are thousands of options, the data is scattered, and every source assumes you already know what beta means.
 
-Ingestion → Processing → Storage → Serving (API) → Frontend
+The manual version of this is what a curious beginner does over a weekend: look up some ETFs, try to figure out which ones are "safe", squint at a chart, give up. This automates that triage — pulls the data, computes the risk metrics, groups similar assets together, and writes the explanation.
 
-- **Ingestion:** scheduled end-of-day batch pull via `yfinance` (ASX + US + global)
-- **Processing:** validation, normalization, feature engineering (Beta, Sharpe,
-  volatility), ML (clustering, ranking, forecasting), NLP explainers
-- **Storage:** SQLite (dev) via SQLAlchemy, structured for a Postgres migration
-- **Serving:** FastAPI REST API with auto-generated docs
-- **Frontend:** React (Vite) — Netflix-style carousels and knowledge cards
+Australia + US + global, because I'm in Melbourne and most tools are US-only.
 
-## Key Design Decisions
+---
 
-### Data source: yfinance
-The only free option covering ASX + US + global in one interface. Trade-off: it's
-an unofficial feed with known data-quality quirks, which we handle explicitly with
-a validation/normalization layer during ingestion rather than trusting it blindly.
+## Running it
 
-### Serve from our own storage, never live-call the source
-Ingestion is a scheduled batch job that accumulates data; the app always reads from
-our database. This gives caching, resilience against feed outages, and a clean
-ingestion/serving separation. Delayed EOD data is appropriate for a long-term
-investment tool.
+```bash
+git clone https://github.com/Prem270920/investment-discovery-engine.git
+cd investment-discovery-engine
 
-### Listing exchange ≠ underlying market
-yfinance tells us where an asset is *listed*, but not what it actually *holds*.
-IVV.AX is ASX-listed and AUD-priced, yet holds 100% US companies (it tracks the
-S&P 500). A naive "tag .AX as Australian" rule would mislabel it as a local pick.
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
 
-We maintain a small curated `underlying_market` override map. Because the asset
-universe is a curated beginner shortlist (dozens, not thousands), this is tractable
-— and it drives both the display tags *and* benchmark selection for beta.
+python -m src.pipeline --recreate    # ~90 seconds; pulls data, computes everything
+uvicorn src.api.main:app --reload    # API on :8000, docs at /docs
+```
 
-### Compute risk metrics ourselves, don't trust vendor fields
-yfinance returns `beta = None` for **every ETF** (confirmed across our sample).
-Since ETFs are central to a beginner-focused tool, we compute volatility, Sharpe,
-and beta ourselves from accumulated price history. This works uniformly for stocks
-and funds, and is transparent rather than a black-box vendor number.
+Then in a second terminal:
 
-### Storage: SQLite + SQLAlchemy, accumulating not overwriting
-Prices are treated as immutable historical facts: each run inserts only dates we
-don't already have, enforced by a `UNIQUE(symbol, date)` constraint so duplicates
-are structurally impossible, not merely avoided by careful code. Assets are
-upserted by symbol. The database *accumulates* history over time rather than
-resetting to whatever the feed offers today.
+```bash
+cd frontend && npm install && npm run dev    # UI on :5173
+```
 
-## Case Study: Debugging Cross-Market Beta
+The clustering model is committed to the repo (`models/cluster_model.joblib`), so you'll get the same six categories I did rather than whatever the market happened to be doing when you cloned it. If you want to retrain: `python -m src.ml.train_clusters`.
 
-The most instructive problem in this project. Worth reading if you want to see how
-decisions were made.
+Add `--skip-forecasts` to the pipeline command for a faster run — the ARIMA stage is the slow part.
 
-**The symptom.** IVV.AX (ASX-listed, tracks S&P 500) returned a beta of **0.03**
-against ^GSPC. Its US-listed twin IVV returned **1.02**. Same fund, same benchmark
-— so 0.03 was impossible, not merely surprising. Cross-checking against the twin is
-what surfaced the bug; in isolation, 0.03 might have passed as "interesting."
+---
 
-**Hypothesis 1 — timezone misalignment.** ASX and US markets trade on offset
-calendars, so daily returns joined by date compare different days' information.
-Fix: resample both series to weekly (W-FRI). Result: beta 0.03 → **0.34**. Big
-improvement, still wrong.
+## How it fits together
 
-**Hypothesis 2 — currency dilution.** IVV.AX is AUD-priced while ^GSPC is USD, so
-AUD/USD movements partially offset the underlying's moves. Fix: convert IVV.AX's
-closes to USD via AUDUSD=X before computing returns. Result: 0.34 → **0.67**.
-Better, still not ~1.0.
+```
+yfinance  →  validate  →  SQLite  →  metrics  →  cluster  →  FastAPI  →  React
+                ↓                       ↓           ↓
+          override map            vol/Sharpe/beta  frozen
+          for bad vendor data     ARIMA forecast   model
+```
 
-**Hypothesis 3 — inverted FX conversion.** Tested by computing both `price × rate`
-and `price ÷ rate`. Divide produced correlation **−0.007** — catastrophically
-worse. Hypothesis rejected; multiply was correct.
+Everything is a batch job. The app never calls yfinance at request time — it reads from its own database. That means it stays up when Yahoo doesn't, and it isn't hostage to rate limits.
 
-**Diagnosis.** A lag test (correlation at shifts −2…+2) showed lag 0 was already
-optimal, ruling out any residual timing offset. But the decisive test was comparing
-IVV.AX(USD) against IVV directly — *the same fund in the same currency* — which
-correlated only **0.67**, when it should be ~0.99. Since the control (IVV vs ^GSPC
-= **0.996**) proved the method itself was sound, the fault had to be in the
-conversion. Root cause: yfinance's daily FX bar and the ASX equity close are
-snapped at **different times of day**, so multiplying them strips some currency
-effect while injecting fresh timing noise. The free data cannot support a clean
-currency strip.
+The pipeline runs five stages inside a single transaction: ingest assets, ingest benchmarks, compute metrics, assign clusters, generate forecasts. If any stage fails the whole thing rolls back, so you never end up with assets but no metrics.
 
-**The decision.** Rather than keep tuning toward a number we had pre-decided was
-"right" — which for a financial figure is how you end up fooling yourself — we
-**dropped the conversion and report the FX-inclusive beta**, clearly documented.
+**56 assets, ~14,000 price bars, six clusters.**
 
-This is defensible because **0.33 is a real number**: an Australian holding an
-unhedged AUD-priced S&P 500 fund genuinely does *not* get 1:1 S&P exposure.
-Currency movements dilute it. That dilution is the investor's lived experience, not
-an artifact. The gap between IVV.AX (0.33) and IVV (1.02) becomes a *teaching
-moment* for the Knowledge Cards rather than a bug swept under the rug.
+---
 
-## What I'd Improve Next
+## Three things that went wrong
 
-- **Cross-currency beta:** with a paid feed providing FX rates snapped at market
-  close, a clean currency-stripped beta becomes possible. Storing both (lived vs
-  underlying exposure) would make the FX effect explicit and educational.
-- **Risk-free rate:** currently fixed per-market constants. Fetching live short-term
-  government bond yields would be more precise (though the effect on *relative*
-  rankings is marginal).
-- **Postgres migration:** SQLAlchemy ORM was chosen specifically so this is a
-  connection-string change, not a rewrite. Triggered when the asset universe or
-  concurrency grows.
-- **Monitoring:** ingestion currently logs failures and summarizes each run.
-  Production would alert on repeated failures or stale data.
+This is the part I'd actually want to talk about in an interview.
+
+### The beta that was impossible
+
+IVV.AX is an ASX-listed ETF that holds the S&P 500. Its US-listed twin, IVV, is literally the same fund. Measured against the S&P 500, IVV came out at beta 1.02 — correct. IVV.AX came out at **0.03**.
+
+Not surprising. Impossible. A fund that holds the S&P 500 cannot be uncorrelated with the S&P 500. I only caught it because I had the twin sitting right there to compare against.
+
+What followed was three hypotheses, each tested rather than assumed:
+
+1. **Timezone misalignment.** The ASX closes before New York opens, so joining daily returns by calendar date compares different days' information. Resampling both to weekly moved beta from 0.03 → 0.34. Better, still wrong.
+2. **Currency dilution.** IVV.AX is priced in AUD; the S&P 500 is in USD. Converting the prices to USD first moved it to 0.67. Better, still wrong.
+3. **Inverted conversion.** Maybe I was multiplying where I should have divided? Tested both. Dividing gave a correlation of −0.007 — catastrophically worse. Hypothesis dead.
+
+The test that settled it: comparing IVV.AX (converted to USD) against IVV directly. Same fund, same currency, so they should correlate ~0.99. They correlated **0.67**. Since the control — IVV against the index — came out at 0.996, the method was fine. The conversion was the broken link.
+
+Root cause: yfinance's daily FX bar and the ASX equity close are snapped at different times of day. Multiplying them strips some of the currency effect while injecting fresh timing noise. **The free data can't support a clean currency conversion.**
+
+So I stopped, and reported the FX-inclusive number instead. That's defensible because **0.33 is a real number** — an Australian holding an unhedged AUD-priced S&P 500 fund genuinely does not get 1:1 exposure to the S&P 500. Currency movements dilute it. That dilution is the investor's actual experience, not an artifact.
+
+The app now explains this gap to the user on the asset page. What started as a bug became the best teaching moment in the product.
+
+I later added IHVV.AX — the currency-*hedged* version of the same fund — as a natural experiment. Its beta came out roughly double the unhedged one, which supports the currency explanation without fully closing the gap. The rest is the timing effect I couldn't fix.
+
+### Carousels that reshuffled every run
+
+The first version refit KMeans on every pipeline run. Since it trains on live market data, and market data moves, the clusters redrew themselves each time. One run labelled the entire bond cluster "Recent Underperformers" — technically true (bonds had the worst Sharpe in a rising market) and completely useless as a category.
+
+The fix was to separate training from inference, which is how this is supposed to work anyway. `train_clusters.py` fits the scaler and the model, derives the labels from the centroids, and saves all three as a versioned artifact. The pipeline loads that artifact and calls `.predict()` — never `.fit()`. Same model in, same categories out.
+
+The labels are frozen inside the artifact too, which killed a second bug: the rules that assign human names to clusters were being re-evaluated each run against shifting centroids, so a category could silently change meaning between runs.
+
+Rule ordering turned out to matter more than I expected. An early version claimed "Higher-Risk Growth" by highest volatility, which grabbed a two-asset cluster that was volatile because it had *crashed* (Sharpe −1.28). Growth now keys on beta, and "Safe & Steady" gets claimed before "Underperformers" so bonds don't get mislabelled in a bull market.
+
+### A pipeline that lied about succeeding
+
+The run summary printed `metrics computed: 56`. The database had zero rows.
+
+During a refactor I'd lost the `session.commit()`. Every run staged its work, logged success, then closed the session and threw it all away. The logs cheerfully reported a completed run the entire time.
+
+I found it by checking `SELECT COUNT(*)` instead of trusting the summary. That habit — verify the outcome, not the log — has caught more in this project than anything else.
+
+---
+
+## The forecasts, and why they're honest
+
+Every asset page shows a 30-day price projection. I want to be direct about what that is.
+
+Forecasting asset prices is not reliably possible. If it were, none of us would need jobs. So the goal was never accuracy — it was building something that shows its own uncertainty rather than hiding it.
+
+Two things make it honest.
+
+**The confidence band widens.** Uncertainty compounds: being unsure about tomorrow is very different from being unsure about six weeks out. Variance grows with the number of steps, so the band grows with √n. For VAS.AX it goes from 3.25 wide on day one to 18.01 by day thirty. You can watch it fan out. That's the lesson, delivered visually.
+
+**Each forecast reports its own measured error.** I hold out the last 30 days, train on everything before that, and check how far off the projection was on data the model never saw. That number goes on the page: *"tested on 30 days it had never seen, this model was off by about 0.71%."*
+
+The error tracks risk almost perfectly, which is the nicest validation of the whole thing:
+
+| Asset | Backtest error |
+|---|---|
+| SHY (short treasuries) | 0.12% |
+| BND (total bond market) | 0.53% |
+| VOO (S&P 500) | 1.93% |
+| AAPL | 5.11% |
+| CSL.AX | 9.85% |
+
+The model is measurably better at boring assets and worse at exciting ones. That isn't a disclaimer, it's evidence — "trust this less for TSLA" becomes something the app can *demonstrate* rather than assert.
+
+Under the hood it fits two competing models per asset — ARIMA on prices and ARIMA on returns — with the order auto-selected by AIC, backtests both, and keeps whichever won. Across 56 assets the split was roughly 39 to 17, so both approaches are earning their place rather than one always winning.
+
+---
+
+## Decisions worth explaining
+
+**Where an asset is listed isn't what it holds.** yfinance tells you IVV.AX trades on the ASX in AUD. It doesn't tell you it holds 500 American companies. A naive "`.AX` means Australian" rule mislabels it, and then the Australia filter shows you a US fund.
+
+So there's a curated override map — but only for the exceptions. Eleven entries covering 56 assets. Individual stocks don't need one (an ASX-listed company *is* Australian); ETFs are the problem, because an ETF is a wrapper that can hold anything. The map is short enough to read in a glance, and every line documents a case where the obvious rule breaks.
+
+**The universe is curated on purpose.** I could auto-fetch the ASX 200 and S&P 500 and have 700 assets. I deliberately didn't. The app exists because beginners can't navigate hundreds of options — dumping 700 on them recreates the exact problem it's meant to solve. Curation *is* the product. It's also the only way to keep the exposure labels correct, since nothing in the free data tells you what an unfamiliar ETF actually holds.
+
+The list lives in `config/universe.yaml`, so scaling up is a config change rather than a code change.
+
+**Risk metrics are computed, not fetched.** yfinance returns `beta = None` for every single ETF I tested. Since ETFs are most of what a beginner should be looking at, that field is useless. Volatility, Sharpe and beta are all computed from stored price history instead — works identically for funds and stocks, and I can explain exactly how each number was derived.
+
+**Clustering doesn't see the labels.** The model gets volatility, Sharpe, beta and dividend yield. It does *not* get asset type, sector, or country, because then it would mostly rediscover the categories I already had. Leaving them out is why the "Market-Neutral Defensives" row contains a utilities ETF, an energy ETF, Johnson & Johnson and Coca-Cola — grouped only by the fact that they all move independently of the market. No conventional taxonomy puts those four together.
+
+**The explainers are templated, not generated.** They read like prose but they're rule-based, assembled from the computed metrics. I considered an LLM and decided against it: in a finance tool aimed at beginners, a model that occasionally invents a fact is worse than one that's slightly stiff. Everything on the page traces back to a number in the database.
+
+---
+
+## Known limitations
+
+- **Cross-currency beta is FX-inclusive.** Documented above. Fixing it properly needs FX rates snapped at market close, which the free feed doesn't provide.
+- **Risk tiers are relative to this universe.** They're quintiles, so "Very low risk" means "among the calmest fifth of the 56 assets here", not an absolute claim about the market.
+- **Cluster labels are heuristics.** Rules applied to centroids, ranked against each other. Reasonable and stable, but they're my interpretation of what the model found — the algorithm doesn't name anything.
+- **No tests.** The honest one. I verified heavily as I built — self-tests on the pure functions, control comparisons, checking the database directly — but none of it is captured as a runnable suite. It's the next thing I'd add.
+- **SQLite.** Fine for a single batch writer. Would need Postgres for concurrent access; the ORM is there specifically so that's a connection-string change.
+
+---
+
+## Stack
+
+Python 3.13 · yfinance · pandas · SQLAlchemy + SQLite · scikit-learn · statsmodels · FastAPI · React (Vite) · plain CSS
+
+No chart library — the price charts and the small volatility "pulse" lines under each carousel title are hand-written SVG, which meant I could make the forecast band and the hover readout behave exactly how I wanted.
+
+---
+
+## What I'd do next
+
+Tests first. Then Postgres and a scheduler, so ingestion actually runs nightly instead of when I remember. After that, the one place NLP genuinely belongs: summarising each company's business description into a sentence a beginner can use, which is a real text task, unlike the metric explainers.
