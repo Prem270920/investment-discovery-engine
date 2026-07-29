@@ -26,6 +26,7 @@ from src.storage.repository import insert_new_prices, upsert_asset
 from src.ingestion.universe import load_universe
 from src.ml.clustering import cluster_and_store
 from src.ml.compute_forecasts import compute_and_store_forecasts
+from src.ml.compute_descriptions import compute_and_store_descriptions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +42,9 @@ INFO_FIELDS = [
 ]
 HISTORY_PERIOD = "1y"
 RETRY_BACKOFF_SECONDS = 2.0
+
+descriptions_ok = 0
+descriptions_skipped = 0
 
 class FetchError(Exception):
     """Raised when usable raw data can't be retrieved for a ticker."""
@@ -149,6 +153,10 @@ def run(recreate: bool = False, skip_forecasts: bool = False):
             logger.info("computing forecasts (this takes a few minutes)...")
             forecasts_ok, forecasts_skipped = compute_and_store_forecasts(session)
 
+        # Stage 6: NLP descriptions, processing on data fetched fresh from yfinance.
+        session.flush()
+        descriptions_ok, descriptions_skipped = compute_and_store_descriptions(session)
+
         session.commit()
         logger.info("committed full pipeline run")
 
@@ -171,6 +179,8 @@ def run(recreate: bool = False, skip_forecasts: bool = False):
     print(f"  validation rejections  : {len(failures['validation'])}")
     print(f"  forecasts computed     : {forecasts_ok}")
     print(f"  forecasts skipped      : {forecasts_skipped}")
+    print(f"  descriptions computed  : {descriptions_ok}")
+    print(f"  descriptions skipped   : {descriptions_skipped}")
     for reason in failures["fetch"]:
         print(f"    fetch: {reason}")
     for reason in failures["validation"]:
