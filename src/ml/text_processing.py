@@ -141,9 +141,45 @@ def _sentence_readability(sentence: str) -> float:
     syllables = sum(count_syllables(w) for w in words)
     return 206.835 - 1.015 * len(words) - 84.6 * (syllables / len(words))
 
-def extractive_summary(text: str, max_sentences: int = 3) -> str:
-    """Select the most central sentences via TF-IDF cosine centrality"""
+# Sentence patterns that are company METADATA, not business description.
+# Filtering them before ranking is corpus preprocessing: domain knowledge about the source, applied once.
+_BOILERPLATE_PATTERNS = [
+    r"\bwas founded in\b",
+    r"\bwas incorporated in\b",
+    r"\bis headquartered in\b",
+    r"\bis based in\b",
+    r"\bformerly known as\b",
+    r"\bchanged its name to\b",
+    r"\boperates as a subsidiary of\b",
+]
+
+_BOILERPLATE = re.compile("|".join(_BOILERPLATE_PATTERNS), re.IGNORECASE)
+
+
+def _strip_boilerplate(sentences: list[str]) -> list[str]:
+    """Drop company-metadata sentences (founding year, HQ, former names).
+
+    Keeps everything if filtering would leave too little to work with.
+    """
+    kept = [s for s in sentences if not _BOILERPLATE.search(s)]
+    return kept if len(kept) >= 2 else sentences
+
+def extractive_summary(text: str, max_sentences: int = 3, centrality_weight: float = CENTRALITY_WEIGHT):
+    """Select sentences by a blend of centrality and readability.
+
+    HOW IT WORKS:
+      1. TF-IDF vectorise each sentence — terms weighted by how distinctive
+         they are to that sentence relative to the document.
+      2. Cosine similarity between every pair of sentences.
+      3. DEGREE CENTRALITY: sum each sentence's similarity to all others. A
+         sentence sharing vocabulary with many others carries the core topic;
+         an outlier is usually a tangent (the "founded in 1976" sentence).
+      4. READABILITY: Flesch score per sentence.
+      5. Normalise both to 0-1 and blend. Rank on the composite.
+      6. Restore ORIGINAL ORDER so the result reads as prose.
+    """
     sentences = split_sentences(text)
+    sentences = _strip_boilerplate(sentences)
     if len(sentences) <= max_sentences:
         return " ".join(sentences)
 
@@ -151,17 +187,17 @@ def extractive_summary(text: str, max_sentences: int = 3) -> str:
         vectorizer = TfidfVectorizer(stop_words="english")
         matrix = vectorizer.fit_transform(sentences)
     except ValueError:
-        # This happens if the text is too short to extract any features.
         return " ".join(sentences[:max_sentences])
 
     similarity = cosine_similarity(matrix)
-    # Exclude self-similarity (always 1.0) so it doesn't dominate the score.
-    np.fill_diagonal(similarity, 0)
+    np.fill_diagonal(similarity, 0)  # exclude self-similarity (always 1.0)
     centrality = similarity.sum(axis=1)
 
-    top_indices = np.argsort(centrality)[-max_sentences:]
-    top_indices = sorted(top_indices)  # restore document order
+    readability = np.array([_sentence_readability(s) for s in sentences])
 
+    composite = (centrality_weight * _normalize(centrality) + (1.0 - centrality_weight) * _normalize(readability))
+
+    top_indices = sorted(np.argsort(composite)[-max_sentences:])
     return " ".join(sentences[i] for i in top_indices)
 
 #  Jargon glossing
@@ -235,10 +271,23 @@ def _self_test() -> None:
     print("-" * 60)
     sents = split_sentences(equity)
     print(f"source: {len(sents)} sentences, {len(equity)} chars")
+
+    # Show the ranking inputs so the blend is inspectable and tunable.
+    vec = TfidfVectorizer(stop_words="english")
+    sim = cosine_similarity(vec.fit_transform(sents))
+    np.fill_diagonal(sim, 0)
+    cen = _normalize(sim.sum(axis=1))
+    read = _normalize(np.array([_sentence_readability(s) for s in sents]))
+    comp = CENTRALITY_WEIGHT * cen + READABILITY_WEIGHT * read
+
+    print(f"\n{'central':>8} {'readable':>9} {'blended':>8}   sentence")
+    for i, s in enumerate(sents):
+        print(f"{cen[i]:>8.2f} {read[i]:>9.2f} {comp[i]:>8.2f}   {s[:52]}...")
+
     before = flesch_reading_ease(equity)
     summary = extractive_summary(equity, max_sentences=2)
     after = flesch_reading_ease(summary)
-    print(f"readability: {before} ({reading_level(before)}) "
+    print(f"\nreadability: {before} ({reading_level(before)}) "
           f"-> {after} ({reading_level(after)})")
     print(f"summary: {summary}\n")
 
