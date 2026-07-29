@@ -131,6 +131,29 @@ class ForecastMeta(Base):
 
     asset: Mapped["Asset"] = relationship()
     
+class AssetDescription(Base):
+    """A beginner-friendly description for one asset, derived from source text"""
+    __tablename__ = "asset_descriptions"
+
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("assets.symbol"), primary_key=True
+    )
+
+    method: Mapped[str] = mapped_column(String, nullable=False)
+    summary: Mapped[str] = mapped_column(String, nullable=False)
+
+    # A JSON column rather than its own table: it's a small, read-only,
+    # one-to-one attachment, not relational data with its own identity.
+    jargon: Mapped[str | None] = mapped_column(String, nullable=True)  # JSON-encoded
+
+    source_readability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    summary_readability: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    asset: Mapped["Asset"] = relationship()
 
 class AssetMetric(Base):
     """Computed risk metrics for one asset in separate table — recomputed each ingestion run.
