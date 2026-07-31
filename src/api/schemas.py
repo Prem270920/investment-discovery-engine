@@ -105,3 +105,25 @@ class ForecastResponse(BaseModel):
     backtest_error_pct: float | None
     horizon_days: int
     points: list[ForecastPoint]
+
+class JargonTerm(BaseModel):
+    """One glossed term from an asset's description."""
+    term: str
+    plain: str
+
+
+class AssetDescriptionResponse(BaseModel):
+    """A beginner-friendly description derived from source text.
+
+    method tells the UI how to present it:
+        'summary' -> extractive summary of a long equity description
+        'jargon'  -> the original short ETF text, with terms glossed
+
+    the UI leads with the text, not the numbersreadability score isn't decision-relevant to someone choosing an investment.
+    """
+    symbol: str
+    method: str
+    summary: str
+    jargon: list[JargonTerm] = []
+    source_readability: float | None = None
+    summary_readability: float | None = None
