@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.schemas import (
+    AssetDescriptionResponse,
     AssetDetail,
     AssetSummary,
     Carousel,
@@ -25,11 +26,14 @@ from src.api.schemas import (
     ForecastPoint,
     ForecastResponse,
     HealthStatus,
+    JargonTerm,
     PriceHistory,
     PricePoint,
 )
+from src.storage.models import (
+    Asset, AssetDescription, AssetMetric, Forecast, ForecastMeta, Price,
+)
 from src.storage.database import SessionLocal
-from src.storage.models import Asset, AssetMetric, Forecast, ForecastMeta, Price
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -356,4 +360,35 @@ def get_forecast(symbol: str, db: Session = Depends(get_db)) -> ForecastResponse
         backtest_error_pct=meta.backtest_error_pct,
         horizon_days=meta.horizon_days,
         points=[ForecastPoint.model_validate(r) for r in rows],
+    )
+
+@app.get(
+    "/api/assets/{symbol}/description",
+    response_model=AssetDescriptionResponse,
+    tags=["assets"],
+)
+def get_description(symbol: str, db: Session = Depends(get_db)) -> AssetDescriptionResponse:
+    """A beginner-friendly description for one asset."""
+    import json
+
+    asset = db.get(Asset, symbol.upper())
+    if asset is None or asset.is_benchmark:
+        raise HTTPException(status_code=404, detail=f"Asset '{symbol}' not found")
+
+    desc = db.get(AssetDescription, asset.symbol)
+    if desc is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No description available for '{symbol}'",
+        )
+
+    jargon = json.loads(desc.jargon) if desc.jargon else []
+
+    return AssetDescriptionResponse(
+        symbol=desc.symbol,
+        method=desc.method,
+        summary=desc.summary,
+        jargon=[JargonTerm(**item) for item in jargon],
+        source_readability=desc.source_readability,
+        summary_readability=desc.summary_readability,
     )
