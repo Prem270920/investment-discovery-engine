@@ -54,3 +54,11 @@ export async function getForecast(symbol) {
     return null;
   }
 }
+
+export async function getDescription(symbol) {
+  try {
+    return await request(`/api/assets/${encodeURIComponent(symbol)}/description`);
+  } catch {
+    return null;
+  }
+}
