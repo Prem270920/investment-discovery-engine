@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { getAsset, getPrices, getForecast, getDescription } from "../api";
 import { riskStyle } from "../risk";
 import PriceChart from "./PriceChart";
 import styles from "./KnowledgeCard.module.css";
-import { getAsset, getPrices, getForecast } from "../api";
 
-/** Plain-language explainer assembled from my own data — no NLP yet, 
- * The cross-currency beta case gets its own paragraph: the FX story is the app's best teaching moment */
+/** Plain-language explainer assembled from own data — the FALLBACK used
+ * when no NLP-derived description exists (ASX ETFs return no source text at all from yfinance).
+ * The cross-currency beta case gets its own paragraph: the FX story is the app's best teaching moment. */
 function explain(asset) {
   const parts = [];
 
@@ -52,13 +53,16 @@ export default function KnowledgeCard({ symbol, onClose }) {
   const [asset, setAsset] = useState(null);
   const [prices, setPrices] = useState(null);
   const [forecast, setForecast] = useState(null);
+  const [description, setDescription] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let live = true;
-    Promise.all([getAsset(symbol), getPrices(symbol, 365), getForecast(symbol)])
-      .then(([a, p, f]) => {
-        if (live) { setAsset(a); setPrices(p.points); setForecast(f); }
+    Promise.all([
+      getAsset(symbol), getPrices(symbol, 365), getForecast(symbol), getDescription(symbol),
+    ])
+      .then(([a, p, f, d]) => {
+        if (live) { setAsset(a); setPrices(p.points); setForecast(f); setDescription(d); }
       })
       .catch((e) => live && setError(e.message));
     return () => { live = false; };
@@ -136,7 +140,18 @@ export default function KnowledgeCard({ symbol, onClose }) {
 
             <section className={styles.explainer}>
               <h3 className={styles.explainerTitle}>What is this?</h3>
-              {explain(asset).map((p, i) => <p key={i} className={styles.para}>{p}</p>)}
+
+              {description ? (
+                <>
+                  <p className={styles.para}>{description.summary}</p>
+                  {description.jargon.length > 0 && (
+                    <JargonGlossary terms={description.jargon} />
+                  )}
+                </>
+              ) : (
+                explain(asset).map((p, i) => <p key={i} className={styles.para}>{p}</p>)
+              )}
+
               <p className={styles.disclaimer}>
                 Educational information only — not financial advice.
               </p>
@@ -144,6 +159,27 @@ export default function KnowledgeCard({ symbol, onClose }) {
           </>
         )}
       </article>
+    </div>
+  );
+}
+
+function JargonGlossary({ terms }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={styles.glossary}>
+      <button className={styles.glossaryToggle} onClick={() => setOpen(!open)}>
+        {open ? "Hide" : "Explain the terms used"} ({terms.length})
+      </button>
+      {open && (
+        <dl className={styles.glossaryList}>
+          {terms.map((t) => (
+            <div key={t.term} className={styles.glossaryItem}>
+              <dt>{t.term}</dt>
+              <dd>{t.plain}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
