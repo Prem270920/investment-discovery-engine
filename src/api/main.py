@@ -281,6 +281,42 @@ def list_assets(
     assets = db.scalars(stmt).all()
     return [AssetSummary(**_asset_with_metrics(db, a)) for a in assets]
 
+@app.get("/api/assets/search", response_model=list[AssetSummary], tags=["discovery"])
+def search_assets(
+    db: Session = Depends(get_db),
+    q: str = Query(..., min_length=1, description="Search text: symbol or name"),
+    limit: int = Query(8, ge=1, le=20),
+) -> list[AssetSummary]:
+    """Search browsable assets by symbol or name. Case-insensitive substring match on both fields."""
+    term = q.strip().lower()
+
+    # Pull candidates matching either field, benchmarks excluded
+    stmt = select(Asset).where(
+        Asset.is_benchmark == False,  # noqa: E712
+        (func.lower(Asset.symbol).contains(term))
+        | (func.lower(Asset.short_name).contains(term)),
+    )
+    candidates = db.scalars(stmt).all()
+
+    def rank(asset: Asset):
+        symbol = asset.symbol.lower()
+        name = asset.short_name.lower()
+        # Lower sort key = higher rank.
+        if symbol == term:
+            score = 0                      # exact ticker
+        elif symbol.startswith(term):
+            score = 1                      # ticker prefix
+        elif term in symbol:
+            score = 2                      # ticker substring
+        elif name.startswith(term):
+            score = 3                      # name prefix
+        else:
+            score = 4                      # name substring
+        return (score, len(asset.symbol))
+
+    ranked = sorted(candidates, key=rank)[:limit]
+    return [AssetSummary(**_asset_with_metrics(db, a)) for a in ranked]
+
 
 @app.get("/api/assets/{symbol}", response_model=AssetDetail, tags=["assets"])
 def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetail:
@@ -392,3 +428,4 @@ def get_description(symbol: str, db: Session = Depends(get_db)) -> AssetDescript
         source_readability=desc.source_readability,
         summary_readability=desc.summary_readability,
     )
+
