@@ -4,6 +4,7 @@ import Carousel from "./components/Carousel";
 import KnowledgeCard from "./components/KnowledgeCard";
 import MarketFilter from "./components/MarketFilter";
 import styles from "./App.module.css";
+import SearchBar from "./components/SearchBar";
 
 function App() {
   const [carousels, setCarousels] = useState(null);
@@ -44,6 +45,7 @@ function App() {
     <div className={styles.page}>
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Discovery Engine</span>
+        <SearchBar onSelectAsset={setSelected} />
         <span className={styles.tagline}>
           Educational tool — not financial advice
         </span>
