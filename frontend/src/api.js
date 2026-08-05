@@ -62,3 +62,14 @@ export async function getDescription(symbol) {
     return null;
   }
 }
+
+/** Search assets by symbol or name */
+export async function searchAssets(query, limit = 8) {
+  const q = query.trim();
+  if (!q) return [];
+  try {
+    return await request(`/api/assets/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+  } catch {
+    return [];
+  }
+}
