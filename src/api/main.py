@@ -317,6 +317,28 @@ def search_assets(
     ranked = sorted(candidates, key=rank)[:limit]
     return [AssetSummary(**_asset_with_metrics(db, a)) for a in ranked]
 
+@app.get("/api/assets/{symbol}/related", response_model=list[AssetSummary], tags=["discovery"])
+def get_related_assets(
+    symbol: str,
+    db: Session = Depends(get_db),
+    n: int = Query(6, ge=1, le=12),
+) -> list[AssetSummary]:
+    """Assets related to this one — same sector/category, ranked by how similarly
+    they behave. The 'more like this' recommendation.
+
+    404 if the asset itself doesn't exist; an empty list is valid (a unique
+    asset with no close peers).
+    """
+    from src.ml.recommendations import get_related
+
+    asset = db.get(Asset, symbol.upper())
+    if asset is None or asset.is_benchmark:
+        raise HTTPException(status_code=404, detail=f"Asset '{symbol}' not found")
+
+    related_symbols = get_related(db, asset.symbol, n=n)
+    related = [db.get(Asset, s) for s in related_symbols]
+    return [AssetSummary(**_asset_with_metrics(db, a)) for a in related if a]
+
 
 @app.get("/api/assets/{symbol}", response_model=AssetDetail, tags=["assets"])
 def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetail:
