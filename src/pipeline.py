@@ -38,7 +38,7 @@ logger = logging.getLogger("pipeline")
 SAMPLE_TICKERS = ["VAS.AX", "CBA.AX", "VOO", "AAPL", "IVV.AX", "IVV"]
 INFO_FIELDS = [
     "symbol", "shortName", "quoteType", "currency", "sector",
-    "beta", "dividendYield", "marketCap", "trailingPE",
+    "category", "beta", "dividendYield", "marketCap", "trailingPE",
 ]
 HISTORY_PERIOD = "1y"
 RETRY_BACKOFF_SECONDS = 2.0
