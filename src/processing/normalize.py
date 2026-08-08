@@ -31,6 +31,7 @@ class NormalizedAsset:
     underlying_market: str     # 'AU' | 'US' | 'GLOBAL'
     latest_close: float
     sector: str | None = None
+    category: str | None = None
     beta: float | None = None
     dividend_yield: float | None = None
     market_cap: int | None = None
@@ -133,6 +134,7 @@ def normalize_asset(raw: dict) -> NormalizedAsset:
 
     # --- quoteType-aware handling of legitimately-null fields ---
     sector = raw.get("sector")
+    category = raw.get("category")
     if sector is None and quote_type == "EQUITY":
         # A stock with no sector is odd enough to note; an ETF without one is normal.
         warnings.append("EQUITY missing sector (unexpected)")
@@ -173,6 +175,7 @@ def normalize_asset(raw: dict) -> NormalizedAsset:
         underlying_market=underlying_market,
         latest_close=latest_close,
         sector=sector,
+        category=category,
         beta=beta,
         dividend_yield=dividend_yield,
         market_cap=market_cap,
