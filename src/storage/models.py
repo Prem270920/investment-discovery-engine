@@ -38,6 +38,8 @@ class Asset(Base):
 
     # Nullable fields
     sector: Mapped[str | None] = mapped_column(String, nullable=True)
+    # ETF equivalent of sector — 'Long Government', 'Equity Energy', etc.
+    category: Mapped[str | None] = mapped_column(String, nullable=True)
     beta: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
     market_cap: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
