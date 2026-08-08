@@ -37,6 +37,7 @@ def upsert_asset(session: Session, asset: NormalizedAsset) -> None:
             listed_exchange=asset.listed_exchange,
             underlying_market=asset.underlying_market,
             sector=asset.sector,
+            category=asset.category,
             beta=asset.beta,
             dividend_yield=asset.dividend_yield,
             market_cap=asset.market_cap,
@@ -53,6 +54,7 @@ def upsert_asset(session: Session, asset: NormalizedAsset) -> None:
         existing.listed_exchange = asset.listed_exchange
         existing.underlying_market = asset.underlying_market
         existing.sector = asset.sector
+        existing.category = asset.category
         existing.beta = asset.beta
         existing.dividend_yield = asset.dividend_yield
         existing.market_cap = asset.market_cap
