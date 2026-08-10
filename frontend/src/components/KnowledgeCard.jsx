@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { getAsset, getPrices, getForecast, getDescription } from "../api";
+import { getAsset, getPrices, getForecast, getDescription, getRelated } from "../api";
 import { riskStyle } from "../risk";
 import PriceChart from "./PriceChart";
 import styles from "./KnowledgeCard.module.css";
 
-/** Plain-language explainer assembled from own data — the FALLBACK used
- * when no NLP-derived description exists (ASX ETFs return no source text at all from yfinance).
- * The cross-currency beta case gets its own paragraph: the FX story is the app's best teaching moment. */
+/** Plain-language explainer assembled from OUR OWN data — the FALLBACK used
+ * when no NLP-derived description exists (ASX ETFs return no source text). */
 function explain(asset) {
   const parts = [];
 
@@ -50,23 +49,39 @@ function explain(asset) {
 }
 
 export default function KnowledgeCard({ symbol, onClose }) {
+  // The card controls its own active symbol, seeded from the prop, so clicking
+  // a related asset navigates WITHIN the card (the Netflix browsing loop)
+  // without the parent needing to know.
+  const [activeSymbol, setActiveSymbol] = useState(symbol);
+
   const [asset, setAsset] = useState(null);
   const [prices, setPrices] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [description, setDescription] = useState(null);
+  const [related, setRelated] = useState([]);
   const [error, setError] = useState(null);
+
+  // If the parent opens a different asset, respect that.
+  useEffect(() => { setActiveSymbol(symbol); }, [symbol]);
 
   useEffect(() => {
     let live = true;
+    // Clear stale data so the card shows a loading state on navigation.
+    setAsset(null);
+    setError(null);
     Promise.all([
-      getAsset(symbol), getPrices(symbol, 365), getForecast(symbol), getDescription(symbol),
+      getAsset(activeSymbol),
+      getPrices(activeSymbol, 365),
+      getForecast(activeSymbol),
+      getDescription(activeSymbol),
+      getRelated(activeSymbol, 6),
     ])
-      .then(([a, p, f, d]) => {
-        if (live) { setAsset(a); setPrices(p.points); setForecast(f); setDescription(d); }
+      .then(([a, p, f, d, r]) => {
+        if (live) { setAsset(a); setPrices(p.points); setForecast(f); setDescription(d); setRelated(r); }
       })
       .catch((e) => live && setError(e.message));
     return () => { live = false; };
-  }, [symbol]);
+  }, [activeSymbol]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -79,11 +94,11 @@ export default function KnowledgeCard({ symbol, onClose }) {
   return (
     <div className={styles.overlay} onClick={onClose}>
       <article className={styles.panel} onClick={(e) => e.stopPropagation()}
-               role="dialog" aria-modal="true" aria-label={`${symbol} details`}>
+               role="dialog" aria-modal="true" aria-label={`${activeSymbol} details`}>
         <button className={styles.close} onClick={onClose} aria-label="Close">✕</button>
 
         {error && <p className={styles.error}>{error}</p>}
-        {!asset && !error && <p className={styles.loading}>Loading {symbol}…</p>}
+        {!asset && !error && <p className={styles.loading}>Loading {activeSymbol}…</p>}
 
         {asset && (
           <>
@@ -156,6 +171,28 @@ export default function KnowledgeCard({ symbol, onClose }) {
                 Educational information only — not financial advice.
               </p>
             </section>
+
+            {related.length > 0 && (
+              <section className={styles.related}>
+                <h3 className={styles.explainerTitle}>You might also like</h3>
+                <p className={styles.relatedHint}>
+                  Similar {asset.quote_type === "ETF" ? "funds" : "companies"}, ranked by how alike they behave.
+                </p>
+                <div className={styles.relatedRow}>
+                  {related.map((r) => {
+                    const rt = riskStyle(r.risk_tier);
+                    return (
+                      <button key={r.symbol} className={styles.relatedChip}
+                              onClick={() => setActiveSymbol(r.symbol)}>
+                        <span className={styles.relatedDot} style={{ background: rt.color }} aria-hidden="true" />
+                        <span className={styles.relatedSymbol}>{r.symbol}</span>
+                        <span className={styles.relatedName}>{r.short_name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </>
         )}
       </article>
