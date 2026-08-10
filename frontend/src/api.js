@@ -73,3 +73,11 @@ export async function searchAssets(query, limit = 8) {
     return [];
   }
 }
+
+export async function getRelated(symbol, n = 6) {
+  try {
+    return await request(`/api/assets/${encodeURIComponent(symbol)}/related?n=${n}`);
+  } catch {
+    return [];
+  }
+}
