@@ -13,6 +13,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -24,6 +25,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.database import Base
+
+# Forecast lenses. Plain strings rather than an Enum type so SQLite and a
+# later Postgres move store them the same way.
+ARIMA_LENS = "arima"
+GRU_LENS = "gru"
+
+# gru_status before any GRU stage has touched the row.
+GRU_NOT_RUN = "not_run"
 
 class Asset(Base):
     __tablename__ = "assets"
@@ -103,6 +112,12 @@ class Forecast(Base):
     )
     date: Mapped["Date"] = mapped_column(Date, nullable=False)
 
+    # Which model produced this path. The default keeps older ARIMA-only
+    # writers valid without them having to know the column exists.
+    lens: Mapped[str] = mapped_column(
+        String, nullable=False, default=ARIMA_LENS, server_default=ARIMA_LENS
+    )
+
     predicted: Mapped[float] = mapped_column(Float, nullable=False)
     lower: Mapped[float] = mapped_column(Float, nullable=False)   # 95% CI lower
     upper: Mapped[float] = mapped_column(Float, nullable=False)   # 95% CI upper
@@ -110,7 +125,9 @@ class Forecast(Base):
     asset: Mapped["Asset"] = relationship()
 
     __table_args__ = (
-        UniqueConstraint("symbol", "date", name="uq_forecast_symbol_date"),
+        # One point per model per day, so ARIMA and GRU can share a date.
+        UniqueConstraint("symbol", "lens", "date", name="uq_forecast_symbol_lens_date"),
+        CheckConstraint(f"lens IN ('{ARIMA_LENS}', '{GRU_LENS}')", name="ck_forecast_lens"),
     )
 
 
@@ -127,6 +144,16 @@ class ForecastMeta(Base):
     arima_order: Mapped[str] = mapped_column(String, nullable=False)  # e.g. '(2,1,1)'
     backtest_error_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     horizon_days: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # GRU side of the comparison. The ARIMA columns above stay the row's
+    # identity; these are filled in afterwards and may never be if torch is
+    # missing, which is why the status defaults to a value saying so.
+    gru_rmse_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gru_status: Mapped[str] = mapped_column(
+        String, nullable=False, default=GRU_NOT_RUN, server_default=GRU_NOT_RUN
+    )  # 'not_run' | 'ok' | 'skipped_no_torch' | 'failed'
+    head_to_head_winner: Mapped[str | None] = mapped_column(String, nullable=True)  # 'arima' | 'gru'
+
     computed_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
