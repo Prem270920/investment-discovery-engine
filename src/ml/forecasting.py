@@ -21,6 +21,8 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tools.sm_exceptions import ValueWarning
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
+from src.ml.forecast_metrics import rmse_pct_of_price
+
 warnings.simplefilter("ignore", ValueWarning)
 warnings.simplefilter("ignore", ConvergenceWarning)
 
@@ -68,12 +70,6 @@ def _best_arima(series: pd.Series):
     return (best, best_order) if best is not None else (None, None)
 
 
-def _rmse_pct(actual: np.ndarray, predicted: np.ndarray):
-
-    rmse = float(np.sqrt(np.mean((actual - predicted) ** 2)))
-    denom = float(np.mean(actual)) or 1.0
-    return (rmse / denom) * 100.0
-
 def _backtest_price_model(prices: pd.Series):
     """Fit price-ARIMA on all but the last BACKTEST_DAYS, forecast that window,
     return % error vs actual. None if it can't fit"""
@@ -84,7 +80,7 @@ def _backtest_price_model(prices: pd.Series):
     if model is None:
         return None
     fc = model.forecast(steps=BACKTEST_DAYS)
-    return _rmse_pct(test.values, np.asarray(fc))
+    return rmse_pct_of_price(test.values, np.asarray(fc))
 
 
 def _backtest_returns_model(prices: pd.Series):
@@ -104,7 +100,7 @@ def _backtest_returns_model(prices: pd.Series):
     for r in fc_returns:
         p = p * (1 + r)
         reconstructed.append(p)
-    return _rmse_pct(test.values, np.array(reconstructed))
+    return rmse_pct_of_price(test.values, np.array(reconstructed))
 
 
 def forecast_asset(prices: pd.Series):
