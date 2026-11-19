@@ -4,7 +4,8 @@ Turns price histories into supervised windows for a sequence model (the GRU)
 The split mirrors the ARIMA backtest so the head to head is fair:
   * holdout    : the last BACKTEST_DAYS price bars, the same window ARIMA is
                  scored on. Nothing from it reaches training, validation or
-                 the scaler.
+                 the scaler. A forward model passes holdout_days=0 to train
+                 on every bar.
   * validation : the last 20 percent of the remaining windows per series,
                  kept for early stopping.
   * training   : everything before that.
@@ -20,10 +21,15 @@ from src.ml.forecasting import BACKTEST_DAYS
 WINDOW_LENGTH = 30
 VALIDATION_PERCENT = 20
 
-# Smallest series that yields at least one training and one validation
-# window: one leading bar lost to pct_change, the holdout, the first window's
-# inputs, and a target each for train and validation.
-MIN_PRICES = 1 + BACKTEST_DAYS + WINDOW_LENGTH + 2
+
+def min_prices_for(holdout_days: int) -> int:
+    """Smallest series that yields at least one training and one validation
+    window: one leading bar lost to pct_change, the holdout, the first
+    window's inputs, and a target each for train and validation."""
+    return 1 + holdout_days + WINDOW_LENGTH + 2
+
+
+MIN_PRICES = min_prices_for(BACKTEST_DAYS)
 
 
 @dataclass(frozen=True)
@@ -72,27 +78,35 @@ def _stack_windows(return_run: np.ndarray, window_count: int, first_target: int)
     return inputs, targets
 
 
-def build_sequence_windows(price_series_list) -> SequenceWindows:
-    """Build scaled train and validation windows from one or more price series."""
+def build_sequence_windows(price_series_list, holdout_days: int = BACKTEST_DAYS) -> SequenceWindows:
+    """Build scaled train and validation windows from one or more price series.
+
+    holdout_days defaults to the ARIMA backtest window. Pass 0 for a forward
+    model: every return is then used and the seed is the latest window.
+    """
     if not price_series_list:
         raise ValueError("need at least one price series")
+    if holdout_days < 0:
+        raise ValueError(f"holdout_days must be >= 0, got {holdout_days}")
+    min_prices = min_prices_for(holdout_days)
 
     split_plans = []
     for position, prices in enumerate(price_series_list):
         series_returns = simple_returns(prices)
-        if len(series_returns) + 1 < MIN_PRICES:
+        if len(series_returns) + 1 < min_prices:
             raise ValueError(
                 f"series {position} has {len(series_returns) + 1} prices, "
-                f"need at least {MIN_PRICES}"
+                f"need at least {min_prices}"
             )
-        # Cutting in return space at -BACKTEST_DAYS is the same cut ARIMA makes
+        # Cutting in return space at -holdout_days is the same cut ARIMA makes
         # at the price level: the first holdout return is the first move into
-        # a holdout price.
-        modelling_returns = series_returns[:-BACKTEST_DAYS]
+        # a holdout price. Index from the front so holdout_days=0 keeps all.
+        holdout_start = len(series_returns) - holdout_days
+        modelling_returns = series_returns[:holdout_start]
         window_count = len(modelling_returns) - WINDOW_LENGTH
         val_count = max(1, window_count * VALIDATION_PERCENT // 100)
         train_count = window_count - val_count
-        split_plans.append((series_returns, modelling_returns, train_count, val_count))
+        split_plans.append((series_returns[holdout_start:], modelling_returns, train_count, val_count))
 
     # Only returns that some training window touches, as input or target,
     # feed the scaler. Validation targets and the holdout stay unseen.
@@ -109,7 +123,7 @@ def build_sequence_windows(price_series_list) -> SequenceWindows:
     val_input_parts, val_target_parts = [], []
     holdout_seeds, holdout_returns = [], []
 
-    for series_returns, modelling_returns, train_count, val_count in split_plans:
+    for series_holdout, modelling_returns, train_count, val_count in split_plans:
         scaled_run = scaler.scale(modelling_returns)
 
         train_inputs, train_targets = _stack_windows(scaled_run, train_count, WINDOW_LENGTH)
@@ -122,7 +136,7 @@ def build_sequence_windows(price_series_list) -> SequenceWindows:
         val_target_parts.append(val_targets)
 
         holdout_seeds.append(scaled_run[-WINDOW_LENGTH:].astype(np.float32)[:, None])
-        holdout_returns.append(series_returns[-BACKTEST_DAYS:])
+        holdout_returns.append(series_holdout)
 
     # float32 because that is what torch layers expect by default.
     return SequenceWindows(
