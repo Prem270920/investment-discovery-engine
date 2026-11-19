@@ -150,3 +150,29 @@ def test_too_short_series_is_refused():
 def test_empty_list_is_refused():
     with pytest.raises(ValueError):
         build_sequence_windows([])
+
+
+def test_each_series_keeps_its_own_holdout():
+    long_prices, short_prices = _positional_prices(251), _positional_prices(151)
+    windows = build_sequence_windows([long_prices, short_prices])
+    for prices, holdout in zip((long_prices, short_prices), windows.holdout_returns):
+        assert np.array_equal(holdout, simple_returns(prices)[-BACKTEST_DAYS:])
+
+
+def test_zero_holdout_uses_every_return_for_the_forward_model():
+    # 251 prices -> 250 returns, no holdout -> 220 windows, 44 validation.
+    windows = build_sequence_windows([_positional_prices(251)], holdout_days=0)
+    assert len(windows.train_targets) == 176
+    assert len(windows.val_targets) == 44
+    assert windows.holdout_returns[0].size == 0
+
+    # The last validation target is the latest return, and the seed is the
+    # latest 30 days, which is what a forward forecast rolls on from.
+    assert _positions(windows.scaler, windows.val_targets[-1:])[0] == 249
+    seed_positions = _positions(windows.scaler, windows.holdout_seeds[0][:, 0])
+    assert list(seed_positions) == list(range(250 - WINDOW_LENGTH, 250))
+
+
+def test_negative_holdout_is_refused():
+    with pytest.raises(ValueError):
+        build_sequence_windows([_positional_prices(251)], holdout_days=-1)

@@ -1,9 +1,5 @@
 """
-Turns price histories into supervised windows for a sequence model (the GRU).
-
-Each sample is WINDOW_LENGTH consecutive daily returns, and its target is the
-return on the following day. Takes a list of series so that moving from one
-model per asset to one global cross asset model is just a longer list.
+Turns price histories into supervised windows for a sequence model (the GRU)
 
 The split mirrors the ARIMA backtest so the head to head is fair:
   * holdout    : the last BACKTEST_DAYS price bars, the same window ARIMA is
