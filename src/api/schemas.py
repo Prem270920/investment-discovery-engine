@@ -1,5 +1,5 @@
 """
-Pydantic response models — the API contract
+Pydantic response models: the API contract
 
 These are deliberately separate from the SQLAlchemy models. The DB schema is an
 internal implementation detail; the API contract is a public promise. Keeping
@@ -34,7 +34,7 @@ class AssetSummary(BaseModel):
 
 
 class AssetDetail(AssetSummary):
-    """Full asset record — what the Knowledge Card needs.
+    """Full asset record: what the Knowledge Card needs.
     This is the union of the Asset and AssetMetric tables, plus some computed fields.
     """
     listed_exchange: str 
@@ -61,6 +61,12 @@ class PriceHistory(BaseModel):
     points: list[PricePoint]
 
 
+class Capabilities(BaseModel):
+    """Optional features the stored data can currently back, so the UI can
+    hide a feature instead of rendering it half empty."""
+    neural_forecast: bool = False
+
+
 class HealthStatus(BaseModel):
     """Liveness + data-freshness check"""
     status: str                  
@@ -69,10 +75,11 @@ class HealthStatus(BaseModel):
     benchmark_count: int
     metrics_last_computed: datetime | None = None
     warnings: list[str] = []
+    capabilities: Capabilities = Capabilities()
 
 
 class Carousel(BaseModel):
-    """One themed row in the Netflix-style UI — a cluster, surfaced as a "carousel" of assets."""
+    """One themed row in the Netflix-style UI: a cluster, surfaced as a "carousel" of assets."""
     label: str
     cluster_id: int
     size: int
@@ -83,7 +90,7 @@ class Carousel(BaseModel):
 
 
 class CarouselsResponse(BaseModel):
-    """The full set of carousels — the discovery dashboard payload."""
+    """The full set of carousels: the discovery dashboard payload."""
     carousels: list[Carousel]
     underlying_market_filter: str | None = None  # echoes any filter applied
 
@@ -97,14 +104,58 @@ class ForecastPoint(BaseModel):
     upper: float
 
 
+class LensPathPoint(BaseModel):
+    """One day of a lens's central projection."""
+    date: date
+    predicted: float
+
+
+class LensBandPoint(BaseModel):
+    """One day of a lens's uncertainty band."""
+    date: date
+    lower: float
+    upper: float
+
+
+class ForecastLens(BaseModel):
+    """One model's projection, split into the line and the band so the chart
+    can draw each without unpicking the other."""
+    path: list[LensPathPoint]
+    band: list[LensBandPoint]
+    rmse_pct: float | None
+
+
+class ForecastLenses(BaseModel):
+    arima: ForecastLens
+    # Null unless the GRU stage finished for this asset, so the UI has one
+    # thing to check before offering the comparison.
+    gru: ForecastLens | None = None
+
+
+class HeadToHead(BaseModel):
+    """Both lenses scored on the same held out days. Fields are null when
+    there is no GRU result to compare against."""
+    winner: str | None = None             # 'arima' | 'gru'
+    arima_rmse_pct: float | None = None
+    gru_rmse_pct: float | None = None
+    margin_pct_points: float | None = None  # gap between the two errors, always >= 0
+    holdout_days: int
+
+
 class ForecastResponse(BaseModel):
-    """A stored ARIMA projection with its measured accuracy"""
+    """A stored ARIMA projection with its measured accuracy.
+
+    The top level fields are the original ARIMA contract and stay as they
+    were; lenses and head_to_head were added alongside for the GRU comparison.
+    """
     symbol: str
     method: str                    
     arima_order: str
     backtest_error_pct: float | None
     horizon_days: int
     points: list[ForecastPoint]
+    lenses: ForecastLenses
+    head_to_head: HeadToHead
 
 class JargonTerm(BaseModel):
     """One glossed term from an asset's description."""

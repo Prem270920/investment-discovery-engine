@@ -1,7 +1,7 @@
 """
 Step 8: FastAPI serving layer.
 
-Serves the pipeline's output over HTTP. Reads ONLY from our database — never
+Serves the pipeline's output over HTTP. Reads ONLY from our database, never
 calls yfinance at request time. That separation (established back in Step 3) is
 what makes this API fast, resilient to feed outages, and independent of Yahoo's
 rate limits.
@@ -21,17 +21,23 @@ from src.api.schemas import (
     AssetDescriptionResponse,
     AssetDetail,
     AssetSummary,
+    Capabilities,
     Carousel,
     CarouselsResponse,
+    ForecastLens,
+    ForecastLenses,
     ForecastPoint,
     ForecastResponse,
+    HeadToHead,
     HealthStatus,
     JargonTerm,
+    LensBandPoint,
+    LensPathPoint,
     PriceHistory,
     PricePoint,
 )
 from src.storage.models import (
-    Asset, AssetDescription, AssetMetric, Forecast, ForecastMeta, Price,
+    ARIMA_LENS, GRU_LENS, Asset, AssetDescription, AssetMetric, Forecast, ForecastMeta, Price,
 )
 from src.storage.database import SessionLocal
 
@@ -39,12 +45,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger("api")
 
+# Mirrors forecasting.BACKTEST_DAYS and compute_neural_forecasts.GRU_OK.
+# Copied rather than imported so the API never loads statsmodels or torch;
+# a test fails if either drifts.
+HOLDOUT_DAYS = 30
+GRU_STATUS_OK = "ok"
+
 app = FastAPI(
     title="Investment Discovery Engine",
     description=(
         "A beginner-friendly discovery API for stable, long-term investments "
         "across ASX, US, and global markets. "
-        "**Educational tool — not financial advice.**"
+        "**Educational tool, not financial advice.**"
     ),
     version="0.1.0",
 )
@@ -66,7 +78,7 @@ def get_db():
     """Yield a DB session per request, always closed afterwards.
 
     FastAPI's dependency injection calls this for each request. The try/finally
-    guarantees the session is returned to the pool even if the endpoint raises —
+    guarantees the session is returned to the pool even if the endpoint raises;
     without this, a burst of errors would leak connections until the app died.
     """
     db = SessionLocal()
@@ -80,7 +92,7 @@ def get_db():
 def _asset_with_metrics(db: Session, asset: Asset) -> dict:
     """Flatten an Asset + its AssetMetric into one dict.
 
-    The DB keeps raw (Asset) and derived (AssetMetric) data in separate tables —
+    The DB keeps raw (Asset) and derived (AssetMetric) data in separate tables,
     a deliberate storage separation. But the frontend wants one object per asset,
     so the API performs that join. The UI shouldn't have to know our schema.
     """
@@ -113,7 +125,7 @@ def health(db: Session = Depends(get_db)) -> HealthStatus:
     """Liveness + DATA FRESHNESS check.
 
     Deliberately more than a ping. An API that returns 200 while serving
-    month-old metrics is broken in a way a naive health check would miss — so we
+    month-old metrics is broken in a way a naive health check would miss, so we
     report when metrics were last computed and warn if the data looks stale.
     """
     warnings: list[str] = []
@@ -125,6 +137,12 @@ def health(db: Session = Depends(get_db)) -> HealthStatus:
             select(func.count()).select_from(Asset).where(Asset.is_benchmark == True)  # noqa: E712
         ) or 0
         last_computed = db.scalar(select(func.max(AssetMetric.computed_at)))
+        # Judged from stored results, not from whether torch imports here:
+        # the API serves what the pipeline wrote and never runs the GRU itself.
+        neural_forecast_ready = db.scalar(
+            select(func.count()).select_from(ForecastMeta)
+            .where(ForecastMeta.gru_status == GRU_STATUS_OK)
+        ) > 0
         db_ok = True
     except Exception as exc:  # noqa: BLE001
         logger.exception("health check: database unreachable")
@@ -137,11 +155,11 @@ def health(db: Session = Depends(get_db)) -> HealthStatus:
         )
 
     if asset_count == 0:
-        warnings.append("no assets stored — has the pipeline been run?")
+        warnings.append("no assets stored: has the pipeline been run?")
     if last_computed is None:
         warnings.append("no metrics computed yet")
     if benchmark_count == 0:
-        warnings.append("no benchmarks stored — beta cannot be computed")
+        warnings.append("no benchmarks stored, so beta cannot be computed")
 
     return HealthStatus(
         status="ok" if not warnings else "degraded",
@@ -150,6 +168,7 @@ def health(db: Session = Depends(get_db)) -> HealthStatus:
         benchmark_count=benchmark_count,
         metrics_last_computed=last_computed,
         warnings=warnings,
+        capabilities=Capabilities(neural_forecast=neural_forecast_ready),
     )
 
 @app.get("/api/carousels", response_model=CarouselsResponse, tags=["discovery"])
@@ -159,7 +178,7 @@ def get_carousels(
     min_size: int = Query(
         1, ge=1,
         description="Only return carousels with at least this many assets "
-                    "(after filtering) — hides stub clusters",
+                    "(after filtering), which hides stub clusters",
     ),
 ) -> CarouselsResponse:
     """The Netflix-style discovery dashboard: assets grouped into named, ML-derived risk carousels.
@@ -263,12 +282,12 @@ def list_assets(
 ) -> list[AssetSummary]:
     """List all browsable assets with their computed metrics.
 
-    This single endpoint powers EVERY carousel — the frontend filters and sorts
+    This single endpoint powers EVERY carousel: the frontend filters and sorts
     the result to build "Top Safe-Haven ETFs", "Stable Dividends in Australia",
     etc. When ML-driven clustering lands, a dedicated /api/carousels endpoint
     will supersede that client-side logic.
 
-    Benchmarks (^AXJO, ^GSPC, AUDUSD=X) are always excluded — they're reference
+    Benchmarks (^AXJO, ^GSPC, AUDUSD=X) are always excluded because they're reference
     series, not investable picks.
     """
     stmt = select(Asset).where(Asset.is_benchmark == False)  # noqa: E712
@@ -323,7 +342,7 @@ def get_related_assets(
     db: Session = Depends(get_db),
     n: int = Query(6, ge=1, le=12),
 ) -> list[AssetSummary]:
-    """Assets related to this one — same sector/category, ranked by how similarly
+    """Assets related to this one: same sector/category, ranked by how similarly
     they behave. The 'more like this' recommendation.
 
     404 if the asset itself doesn't exist; an empty list is valid (a unique
@@ -342,7 +361,7 @@ def get_related_assets(
 
 @app.get("/api/assets/{symbol}", response_model=AssetDetail, tags=["assets"])
 def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetail:
-    """Full detail for one asset — powers the Knowledge Card.
+    """Full detail for one asset, which powers the Knowledge Card.
 
     404s for unknown symbols AND for benchmarks (which exist in the assets table
     to satisfy the prices foreign key, but aren't investable picks a user browses).
@@ -369,7 +388,7 @@ def get_prices(
     """Price history for charting on the Knowledge Card.
 
     Defaults to a year. The `days` cap exists because a beginner's sparkline
-    doesn't need 2,000 points — and shipping them would waste bandwidth.
+    doesn't need 2,000 points, and shipping them would waste bandwidth.
     """
     asset = db.get(Asset, symbol.upper())
     if asset is None or asset.is_benchmark:
@@ -405,11 +424,14 @@ def get_forecast(symbol: str, db: Session = Depends(get_db)) -> ForecastResponse
             detail=f"No forecast available for '{symbol}'",
         )
 
-    rows = db.scalars(
-        select(Forecast)
-        .where(Forecast.symbol == asset.symbol)
-        .order_by(Forecast.date)
-    ).all()
+    arima_rows = _lens_rows(db, asset.symbol, ARIMA_LENS)
+    arima_lens = _as_lens(arima_rows, meta.backtest_error_pct)
+
+    gru_lens = None
+    if meta.gru_status == GRU_STATUS_OK:
+        gru_rows = _lens_rows(db, asset.symbol, GRU_LENS)
+        if gru_rows:
+            gru_lens = _as_lens(gru_rows, meta.gru_rmse_pct)
 
     return ForecastResponse(
         symbol=asset.symbol,
@@ -417,7 +439,46 @@ def get_forecast(symbol: str, db: Session = Depends(get_db)) -> ForecastResponse
         arima_order=meta.arima_order,
         backtest_error_pct=meta.backtest_error_pct,
         horizon_days=meta.horizon_days,
-        points=[ForecastPoint.model_validate(r) for r in rows],
+        # ARIMA only: older clients read points as the single forecast line.
+        points=[ForecastPoint.model_validate(row) for row in arima_rows],
+        lenses=ForecastLenses(arima=arima_lens, gru=gru_lens),
+        head_to_head=_head_to_head(meta, gru_lens),
+    )
+
+
+def _lens_rows(db: Session, symbol: str, lens: str) -> list[Forecast]:
+    return list(db.scalars(
+        select(Forecast)
+        .where(Forecast.symbol == symbol, Forecast.lens == lens)
+        .order_by(Forecast.date)
+    ).all())
+
+
+def _as_lens(rows: list[Forecast], rmse_pct: float | None) -> ForecastLens:
+    return ForecastLens(
+        path=[LensPathPoint(date=row.date, predicted=row.predicted) for row in rows],
+        band=[LensBandPoint(date=row.date, lower=row.lower, upper=row.upper) for row in rows],
+        rmse_pct=rmse_pct,
+    )
+
+
+def _head_to_head(meta: ForecastMeta, gru_lens: ForecastLens | None) -> HeadToHead:
+    # Only a GRU result that is actually served counts, so the strip and the
+    # chart can never disagree about whether a comparison exists.
+    if gru_lens is None:
+        return HeadToHead(arima_rmse_pct=meta.backtest_error_pct, holdout_days=HOLDOUT_DAYS)
+
+    margin = None
+    if meta.backtest_error_pct is not None and meta.gru_rmse_pct is not None:
+        # Both errors are stored to 2 decimals; rounding keeps float noise
+        # like 0.30000000000000004 out of the response.
+        margin = round(abs(meta.backtest_error_pct - meta.gru_rmse_pct), 2)
+    return HeadToHead(
+        winner=meta.head_to_head_winner,
+        arima_rmse_pct=meta.backtest_error_pct,
+        gru_rmse_pct=meta.gru_rmse_pct,
+        margin_pct_points=margin,
+        holdout_days=HOLDOUT_DAYS,
     )
 
 @app.get(

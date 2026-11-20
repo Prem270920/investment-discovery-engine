@@ -1,0 +1,178 @@
+"""
+API tests for the two lens forecast endpoint and the health capabilities.
+
+Each test runs the real FastAPI app against a throwaway in-memory SQLite
+database, swapped in through the get_db dependency, so the production
+database is never touched.
+"""
+
+from datetime import date, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from src.api import main as api
+from src.storage.database import Base
+from src.storage.models import ARIMA_LENS, GRU_LENS, Asset
+from src.storage.repository import replace_forecast, update_gru_meta, upsert_arima_meta
+
+FIRST_DAY = date(2026, 11, 23)
+ORIGINAL_FORECAST_FIELDS = {
+    "symbol", "method", "arima_order", "backtest_error_pct", "horizon_days", "points",
+}
+
+
+def _add_asset(scratch_session, symbol):
+    scratch_session.add(Asset(
+        symbol=symbol, short_name=symbol, quote_type="EQUITY", currency="USD",
+        listed_exchange="NYSE", underlying_market="US", latest_close=100.0,
+    ))
+    scratch_session.flush()
+
+
+def _store_projection(scratch_session, symbol, lens, start_price, days=30):
+    projection_dates = [FIRST_DAY + timedelta(days=offset) for offset in range(days)]
+    mids = [start_price + offset for offset in range(days)]
+    replace_forecast(
+        scratch_session, symbol, projection_dates, mids,
+        [mid - 5 for mid in mids], [mid + 5 for mid in mids], lens=lens,
+    )
+
+
+@pytest.fixture
+def scratch_session():
+    # StaticPool keeps one connection, so the app's sessions and the test's
+    # session all see the same in-memory database.
+    scratch_engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    Base.metadata.create_all(scratch_engine)
+    session_factory = sessionmaker(bind=scratch_engine)
+    seeding_session = session_factory()
+
+    def scratch_db():
+        request_session = session_factory()
+        try:
+            yield request_session
+        finally:
+            request_session.close()
+
+    api.app.dependency_overrides[api.get_db] = scratch_db
+    yield seeding_session
+    api.app.dependency_overrides.clear()
+    seeding_session.close()
+    scratch_engine.dispose()
+
+
+@pytest.fixture
+def client(scratch_session):
+    return TestClient(api.app)
+
+
+@pytest.fixture
+def gru_winner(scratch_session):
+    """AAPL: GRU finished and beat ARIMA."""
+    _add_asset(scratch_session, "AAPL")
+    _store_projection(scratch_session, "AAPL", ARIMA_LENS, start_price=200.0)
+    _store_projection(scratch_session, "AAPL", GRU_LENS, start_price=300.0)
+    upsert_arima_meta(scratch_session, "AAPL", "returns", "(1, 0, 0)", 1.46, 30)
+    update_gru_meta(scratch_session, "AAPL", "ok", gru_rmse_pct=1.16, head_to_head_winner=GRU_LENS)
+    scratch_session.commit()
+
+
+@pytest.fixture
+def gru_skipped(scratch_session):
+    """SHY: GRU never ran because torch was unavailable."""
+    _add_asset(scratch_session, "SHY")
+    _store_projection(scratch_session, "SHY", ARIMA_LENS, start_price=80.0)
+    upsert_arima_meta(scratch_session, "SHY", "price", "(0, 1, 1)", 0.41, 30)
+    update_gru_meta(scratch_session, "SHY", "skipped_no_torch")
+    scratch_session.commit()
+
+
+def test_original_fields_are_unchanged_and_points_stay_arima_only(client, gru_winner):
+    forecast_body = client.get("/api/assets/AAPL/forecast").json()
+
+    assert ORIGINAL_FORECAST_FIELDS <= forecast_body.keys()
+    assert forecast_body["method"] == "returns"
+    assert forecast_body["arima_order"] == "(1, 0, 0)"
+    assert forecast_body["backtest_error_pct"] == 1.46
+    assert forecast_body["horizon_days"] == 30
+    # The GRU rows share these dates; before the lens filter they leaked
+    # into points and doubled the line.
+    assert len(forecast_body["points"]) == 30
+    assert forecast_body["points"][0] == {
+        "date": FIRST_DAY.isoformat(), "predicted": 200.0, "lower": 195.0, "upper": 205.0,
+    }
+
+
+def test_both_lenses_are_served_with_path_band_and_rmse(client, gru_winner):
+    lenses = client.get("/api/assets/AAPL/forecast").json()["lenses"]
+
+    assert lenses["arima"]["rmse_pct"] == 1.46
+    assert lenses["gru"]["rmse_pct"] == 1.16
+    assert len(lenses["gru"]["path"]) == len(lenses["gru"]["band"]) == 30
+    assert lenses["gru"]["path"][0] == {"date": FIRST_DAY.isoformat(), "predicted": 300.0}
+    assert lenses["gru"]["band"][0] == {"date": FIRST_DAY.isoformat(), "lower": 295.0, "upper": 305.0}
+    assert lenses["arima"]["path"][0]["predicted"] == 200.0
+
+
+def test_head_to_head_reports_winner_and_margin(client, gru_winner):
+    head_to_head = client.get("/api/assets/AAPL/forecast").json()["head_to_head"]
+    assert head_to_head == {
+        "winner": "gru",
+        "arima_rmse_pct": 1.46,
+        "gru_rmse_pct": 1.16,
+        "margin_pct_points": 0.3,
+        "holdout_days": 30,
+    }
+
+
+def test_gru_is_null_and_head_to_head_empty_when_not_ok(client, gru_skipped):
+    forecast_body = client.get("/api/assets/SHY/forecast").json()
+
+    assert forecast_body["lenses"]["gru"] is None
+    assert forecast_body["lenses"]["arima"]["rmse_pct"] == 0.41
+    assert forecast_body["head_to_head"] == {
+        "winner": None,
+        "arima_rmse_pct": 0.41,
+        "gru_rmse_pct": None,
+        "margin_pct_points": None,
+        "holdout_days": 30,
+    }
+    assert len(forecast_body["points"]) == 30
+
+
+def test_ok_status_without_stored_rows_is_still_null(client, scratch_session, gru_winner):
+    # A status that claims success with no path behind it must not produce a
+    # half drawn GRU line.
+    replace_forecast(scratch_session, "AAPL", [], [], [], [], lens=GRU_LENS)
+    scratch_session.commit()
+    forecast_body = client.get("/api/assets/AAPL/forecast").json()
+    assert forecast_body["lenses"]["gru"] is None
+    assert forecast_body["head_to_head"]["winner"] is None
+
+
+def test_unknown_asset_is_404(client, gru_winner):
+    assert client.get("/api/assets/NOPE/forecast").status_code == 404
+
+
+def test_health_reports_neural_forecast_when_a_gru_result_is_stored(client, gru_winner):
+    health_body = client.get("/api/health").json()
+    assert health_body["capabilities"] == {"neural_forecast": True}
+
+
+def test_health_reports_no_neural_forecast_when_every_gru_was_skipped(client, gru_skipped):
+    health_body = client.get("/api/health").json()
+    assert health_body["capabilities"] == {"neural_forecast": False}
+
+
+def test_api_constants_match_the_pipeline():
+    from src.ml.compute_neural_forecasts import GRU_OK
+    from src.ml.forecasting import BACKTEST_DAYS
+
+    assert api.HOLDOUT_DAYS == BACKTEST_DAYS
+    assert api.GRU_STATUS_OK == GRU_OK
