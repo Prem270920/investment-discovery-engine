@@ -6,9 +6,10 @@ The entry point that runs the complete flow in one atomic transaction:
       -> ingest assets      (fetch, normalize, store)
       -> ingest benchmarks  (^AXJO, ^GSPC as is_benchmark rows)
       -> compute metrics    (volatility, Sharpe, beta from stored prices)
+      -> cluster, ARIMA forecasts, GRU forecasts (stage 5b), descriptions
       -> commit once
 
-if any stage fails, the whole run rolls back — we never leave the DB half-populated 
+if any stage fails, the whole run rolls back, so we never leave the DB half-populated 
 (e.g. assets but no metrics, or prices missing their benchmarks).
 """
 
@@ -26,6 +27,10 @@ from src.storage.repository import insert_new_prices, upsert_asset
 from src.ingestion.universe import load_universe
 from src.ml.clustering import cluster_and_store
 from src.ml.compute_forecasts import compute_and_store_forecasts
+from src.ml.compute_neural_forecasts import (
+    compute_and_store_neural_forecasts,
+    reset_neural_forecasts,
+)
 from src.ml.compute_descriptions import compute_and_store_descriptions
 
 logging.basicConfig(
@@ -118,12 +123,14 @@ assets_clustered = 0
 forecasts_ok = 0
 forecasts_skipped = 0
 
-def run(recreate: bool = False, skip_forecasts: bool = False):
+def run(recreate: bool = False, skip_forecasts: bool = False, skip_neural: bool = False):
     if recreate:
         logger.warning("--recreate: dropping ALL tables first")
         Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     logger.info("schema ready (assets, prices, asset_metrics)")
+
+    neural_counts = None  # stays None when stage 5b doesn't run
 
     session = SessionLocal()
     try:
@@ -153,6 +160,20 @@ def run(recreate: bool = False, skip_forecasts: bool = False):
             logger.info("computing forecasts (this takes a few minutes)...")
             forecasts_ok, forecasts_skipped = compute_and_store_forecasts(session)
 
+        # Stage 5b: GRU forecasts, scored head to head against ARIMA. Same
+        # transaction, so a crash here still rolls everything back; per asset
+        # failures and a missing torch are handled inside the stage.
+        session.flush()  # make stage 5's forecast_meta rows visible
+        if skip_neural:
+            logger.info("--skip-neural: skipping GRU forecast stage")
+            if not skip_forecasts:
+                # Stage 5 just replaced every forecast row, GRU ones included,
+                # so the old GRU status and winner no longer hold.
+                reset_neural_forecasts(session)
+        else:
+            logger.info("computing GRU forecasts...")
+            neural_counts = compute_and_store_neural_forecasts(session)
+
         # Stage 6: NLP descriptions, processing on data fetched fresh from yfinance.
         session.flush()
         descriptions_ok, descriptions_skipped = compute_and_store_descriptions(session)
@@ -162,7 +183,7 @@ def run(recreate: bool = False, skip_forecasts: bool = False):
 
     except Exception:
         session.rollback()
-        logger.exception("pipeline failed — rolled back, no partial data")
+        logger.exception("pipeline failed and was rolled back, no partial data")
         raise
     finally:
         session.close()
@@ -179,6 +200,12 @@ def run(recreate: bool = False, skip_forecasts: bool = False):
     print(f"  validation rejections  : {len(failures['validation'])}")
     print(f"  forecasts computed     : {forecasts_ok}")
     print(f"  forecasts skipped      : {forecasts_skipped}")
+    if neural_counts is None:
+        print("  GRU forecasts          : skipped (--skip-neural)")
+    else:
+        print(f"  GRU forecasts ok       : {neural_counts['ok']}")
+        print(f"  GRU forecasts failed   : {neural_counts['failed']}")
+        print(f"  GRU skipped (no torch) : {neural_counts['skipped_no_torch']}")
     print(f"  descriptions computed  : {descriptions_ok}")
     print(f"  descriptions skipped   : {descriptions_skipped}")
     for reason in failures["fetch"]:
@@ -198,8 +225,12 @@ def main() -> None:
         "--skip-forecasts", action="store_true",
         help="Skip the expensive ARIMA forecast stage (fast dev runs)",
     )
+    parser.add_argument(
+        "--skip-neural", action="store_true",
+        help="Skip the GRU forecast stage (stage 5b)",
+    )
     args = parser.parse_args()
-    run(recreate=args.recreate, skip_forecasts=args.skip_forecasts)
+    run(recreate=args.recreate, skip_forecasts=args.skip_forecasts, skip_neural=args.skip_neural)
 
 
 if __name__ == "__main__":
