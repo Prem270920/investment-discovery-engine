@@ -1,0 +1,132 @@
+/*
+ * Design tokens. Imported once, from main.jsx, before any other stylesheet.
+ *
+ * The names that already existed (--bg-deep, --ink, --accent, --risk-*, ...)
+ * keep their exact values so every current var() resolves as before. New
+ * tokens sit alongside them for the Phase R redesign.
+ */
+
+:root {
+  /* Brand. The two colours the whole identity hangs on. */
+  --color-navy: #0B1420;
+  --color-teal: #3DD6C4;
+
+  /* Surfaces, darkest first */
+  --bg-deep:   var(--color-navy);
+  --bg-panel:  #131F2E;
+  --bg-hover:  #1B2C3F;
+  --hairline:  #22303F;
+  /* Dims the page behind a modal; a touch darker than navy so the panel lifts off it */
+  --overlay-scrim: rgba(4, 10, 18, 0.72);
+
+  /* Text */
+  --ink:       #E8EEF4;
+  --ink-muted: #7C8D9E;
+
+  /* Accent, used sparingly so it keeps meaning something */
+  --accent:    var(--color-teal);
+
+  /* Risk tier badges as they look today. Muted on purpose: a nervous
+     beginner shouldn't see alarm red. */
+  --risk-very-low:  #4FA88A;
+  --risk-low:       #7FB069;
+  --risk-moderate:  #E0B25C;
+  --risk-high:      #D98C5F;
+  --risk-very-high: #C96A6A;
+
+  /* Risk temperature, tier 1 (Calm) to tier 5 (Volatile). Cool muted teal
+     warming to muted coral. Every step is under the brand teal's saturation
+     so none of them reads as neon, and each clears 5.7:1 contrast on both
+     --bg-deep and --bg-panel, so they work as text as well as fills. */
+  --risk-temp-1: #5FB8AC;  /* Calm */
+  --risk-temp-2: #8DBA9C;
+  --risk-temp-3: #C4B987;
+  --risk-temp-4: #D9A07F;
+  --risk-temp-5: #D97F74;  /* Volatile */
+
+  /* Type families */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+
+  /* Type scale. Sizes match what the app already uses, so adopting a token
+     later doesn't shift anything. Display and title are Fraunces; body,
+     caption and numeral are Inter. */
+  --type-display-size:   30px;
+  --type-display-weight: 600;
+  --type-display-leading: 1.15;
+
+  --type-title-size:     24px;
+  --type-title-weight:   600;
+  --type-title-leading:  1.25;
+
+  --type-body-size:      14px;
+  --type-body-weight:    400;
+  --type-body-leading:   1.6;
+
+  --type-caption-size:   12px;
+  --type-caption-weight: 500;
+  --type-caption-leading: 1.4;
+
+  /* Numbers sit in columns, so they need tabular figures to line up */
+  --type-numeral-size:    16px;
+  --type-numeral-weight:  600;
+  --type-numeral-variant: tabular-nums;
+
+  /* Spacing on a 4px grid. --gap and --gap-lg are the older names. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --gap:     var(--space-4);
+  --gap-lg:  var(--space-6);
+
+  /* Radius */
+  --radius-sm:   8px;
+  --radius:      10px;
+  --radius-lg:   14px;
+  --radius-pill: 999px;
+
+  /* Motion. Short durations for feedback on hover and focus, longer ones
+     for data revealing itself as it scrolls in. */
+  --duration-fast:   140ms;
+  --duration-base:   180ms;
+  --duration-slow:   320ms;
+  --duration-reveal: 600ms;
+  --ease-standard: ease;
+  /* Starts quick and settles slowly, which reads as arriving rather than bouncing */
+  --ease-out:      cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/*
+ * Reduced motion: everything lands on its final state at once.
+ *
+ * Durations collapse to almost zero instead of animation: none, because
+ * none would also skip the end state of any animation that fills forwards,
+ * leaving content stuck at its starting opacity or offset. Pseudo elements
+ * are included so decorative ::before/::after transitions stop too. The
+ * duration tokens drop to 0ms for any JavaScript that reads them.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast:   0ms;
+    --duration-base:   0ms;
+    --duration-slow:   0ms;
+    --duration-reveal: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

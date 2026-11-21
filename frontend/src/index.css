@@ -1,35 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap');
 
-:root {
-  /* Surfaces */
-  --bg-deep:   #0B1420;
-  --bg-panel:  #131F2E;
-  --bg-hover:  #1B2C3F;
-  --hairline:  #22303F;
-
-  /* Ink */
-  --ink:       #E8EEF4;
-  --ink-muted: #7C8D9E;
-
-  /* Accent — used sparingly */
-  --accent:    #3DD6C4;
-
-  /* Risk tiers — muted on purpose; a nervous beginner shouldn't see alarm-red */
-  --risk-very-low:  #4FA88A;
-  --risk-low:       #7FB069;
-  --risk-moderate:  #E0B25C;
-  --risk-high:      #D98C5F;
-  --risk-very-high: #C96A6A;
-
-  /* Type */
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-body:    'Inter', system-ui, sans-serif;
-
-  /* Spacing rhythm */
-  --gap:      16px;
-  --gap-lg:   32px;
-  --radius:   10px;
-}
+/* Tokens live in styles/tokens.css, imported before this file in main.jsx. */
 
 * { box-sizing: border-box; }
 
@@ -49,7 +20,4 @@ body {
 /* Tabular figures everywhere numbers appear, so metrics align in columns */
 .tnum { font-variant-numeric: tabular-nums; }
 
-/* Respect reduced-motion preferences — part of the quality floor */
-@media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
-}
+/* The reduced motion rule lives in styles/tokens.css with the motion tokens. */
