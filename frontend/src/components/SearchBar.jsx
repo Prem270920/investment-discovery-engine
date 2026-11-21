@@ -12,12 +12,16 @@ export default function SearchBar({ onSelectAsset }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
 
+  // Clearing the box drops old results straight away, in the same keystroke,
+  // so typing again never flashes matches for the previous query.
+  const handleQueryChange = (value) => {
+    setQuery(value);
+    if (!value.trim()) setResults([]);
+  };
+
   // Debounce: only search 200ms after the last keystroke.
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
+    if (!query.trim()) return;
     const timer = setTimeout(() => {
       searchAssets(query).then((r) => {
         setResults(r);
@@ -50,7 +54,7 @@ export default function SearchBar({ onSelectAsset }) {
         type="text"
         placeholder="Search a stock or fund…"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => handleQueryChange(e.target.value)}
         onFocus={() => results.length && setOpen(true)}
         aria-label="Search assets"
       />

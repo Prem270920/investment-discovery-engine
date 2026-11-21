@@ -15,8 +15,9 @@ const observerSupported = () =>
  * Without IntersectionObserver the element counts as visible from the start,
  * so content is never left stuck in its pre reveal state.
  *
- * Options are read when the element is first observed; changing them later
- * has no effect, which suits a one shot reveal.
+ * Changing the options before the element is reached re-observes it with the
+ * new ones; after it has fired they no longer matter. An array threshold
+ * should be a stable reference, or every render will re-observe.
  */
 export function useInView({ threshold = 0.2, rootMargin = "0px" } = {}) {
   const elementRef = useRef(null);
@@ -38,9 +39,7 @@ export function useInView({ threshold = 0.2, rootMargin = "0px" } = {}) {
     );
     observer.observe(element);
     return () => observer.disconnect();
-    // threshold and rootMargin are deliberately left out: see the note above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inView]);
+  }, [inView, threshold, rootMargin]);
 
   return [elementRef, inView];
 }

@@ -48,27 +48,37 @@ function explain(asset) {
   return parts;
 }
 
+// What the card holds before an asset has loaded: the loading state.
+const EMPTY_CARD = {
+  symbol: null, asset: null, prices: null, forecast: null,
+  description: null, related: [], error: null,
+};
+
 export default function KnowledgeCard({ symbol, onClose }) {
   // The card controls its own active symbol, seeded from the prop, so clicking
   // a related asset navigates WITHIN the card (the Netflix browsing loop)
   // without the parent needing to know.
   const [activeSymbol, setActiveSymbol] = useState(symbol);
 
-  const [asset, setAsset] = useState(null);
-  const [prices, setPrices] = useState(null);
-  const [forecast, setForecast] = useState(null);
-  const [description, setDescription] = useState(null);
-  const [related, setRelated] = useState([]);
-  const [error, setError] = useState(null);
+  // If the parent opens a different asset, respect that. Adjusted during
+  // render rather than in an effect, so the card never paints a frame
+  // still showing the previous asset's symbol.
+  const [openedSymbol, setOpenedSymbol] = useState(symbol);
+  if (symbol !== openedSymbol) {
+    setOpenedSymbol(symbol);
+    setActiveSymbol(symbol);
+  }
 
-  // If the parent opens a different asset, respect that.
-  useEffect(() => { setActiveSymbol(symbol); }, [symbol]);
+  // Everything loaded for one asset, tagged with the symbol it belongs to.
+  // Navigating changes activeSymbol, which makes the old content no longer
+  // match, so the card falls back to its loading state without having to
+  // clear anything first.
+  const [loadedCard, setLoadedCard] = useState(EMPTY_CARD);
+  const shownCard = loadedCard.symbol === activeSymbol ? loadedCard : EMPTY_CARD;
+  const { asset, prices, forecast, description, related, error } = shownCard;
 
   useEffect(() => {
     let live = true;
-    // Clear stale data so the card shows a loading state on navigation.
-    setAsset(null);
-    setError(null);
     Promise.all([
       getAsset(activeSymbol),
       getPrices(activeSymbol, 365),
@@ -77,9 +87,14 @@ export default function KnowledgeCard({ symbol, onClose }) {
       getRelated(activeSymbol, 6),
     ])
       .then(([a, p, f, d, r]) => {
-        if (live) { setAsset(a); setPrices(p.points); setForecast(f); setDescription(d); setRelated(r); }
+        if (live) {
+          setLoadedCard({
+            symbol: activeSymbol, asset: a, prices: p.points, forecast: f,
+            description: d, related: r, error: null,
+          });
+        }
       })
-      .catch((e) => live && setError(e.message));
+      .catch((e) => live && setLoadedCard({ ...EMPTY_CARD, symbol: activeSymbol, error: e.message }));
     return () => { live = false; };
   }, [activeSymbol]);
 

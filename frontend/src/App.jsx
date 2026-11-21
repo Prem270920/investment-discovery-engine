@@ -13,20 +13,25 @@ function App() {
   const [market, setMarket] = useState(null);   // null = all markets
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback((underlyingMarket) => {
-    setLoading(true);
+  const fetchCarousels = useCallback((underlyingMarket) => {
     // min_size=3 hides the 2-asset stub carousel from the main dashboard
-    getCarousels(underlyingMarket, 3)
+    return getCarousels(underlyingMarket, 3)
       .then((data) => setCarousels(data.carousels))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => setError(err.message));
   }, []);
 
-  useEffect(() => { load(market); }, [market, load]);
+  // First load only. The loading flag is left alone here: it only dims
+  // carousels already on screen, and there are none yet.
+  useEffect(() => { fetchCarousels(null); }, [fetchCarousels]);
 
+  // Later loads start from the click that asks for them. Re-clicking the
+  // active tab changes nothing, so it fetches nothing, as before.
   const handleMarketChange = (value) => {
+    if (value === market) return;
     setError(null);
     setMarket(value);
+    setLoading(true);
+    fetchCarousels(value).finally(() => setLoading(false));
   };
 
   if (error) {

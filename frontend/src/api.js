@@ -13,7 +13,8 @@ async function request(path) {
     // fetch only rejects on network failure
     throw new Error(
       `Could not reach the API at ${url}. Is the backend running? ` +
-      `(${networkError.message})`
+      `(${networkError.message})`,
+      { cause: networkError },
     );
   }
   if (!response.ok) {
