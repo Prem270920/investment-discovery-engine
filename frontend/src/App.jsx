@@ -64,9 +64,11 @@ function App() {
     <div className={styles.page}>
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Discovery Engine</span>
-        <SearchBar onSelectAsset={setSelected} />
+        <div className={styles.searchSlot}>
+          <SearchBar onSelectAsset={setSelected} />
+        </div>
         <span className={styles.tagline}>
-          Educational tool — not financial advice
+          <span>Educational tool.</span> <span>Not financial advice.</span>
         </span>
       </header>
 

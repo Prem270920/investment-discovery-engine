@@ -27,6 +27,33 @@
   color: var(--ink-muted);
 }
 
+/* Phone widths can't fit the name, a usable search box and the note on one
+   line. The name and note share the first row and the search box takes the
+   whole second row, so its placeholder is never cut off. */
+@media (max-width: 560px) {
+  .topbar {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .searchSlot {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .tagline {
+    text-align: right;
+    line-height: 1.35;
+  }
+
+  /* One sentence per line, so the break never lands inside a sentence */
+  .tagline > span {
+    display: block;
+  }
+}
+
 .main {
   padding: 32px;
   max-width: 1400px;

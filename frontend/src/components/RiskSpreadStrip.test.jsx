@@ -52,6 +52,11 @@ describe("RiskSpreadStrip", () => {
     expect(dotFor("AAPL").style.getPropertyValue("--dot-color")).toBe("var(--risk-temp-5)");
   });
 
+  it("keeps every dot out of the tab order, since each card is already a tab stop", () => {
+    renderStrip();
+    expect(dots().every((dot) => dot.tabIndex === -1)).toBe(true);
+  });
+
   it("reports hover and focus so the matching card can light up", () => {
     const props = renderStrip();
     fireEvent.mouseEnter(dotFor("VTI"));

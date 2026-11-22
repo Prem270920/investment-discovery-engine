@@ -4,6 +4,13 @@
   max-width: 100%;
 }
 
+/* On phones the top bar gives search a row of its own; fill it. */
+@media (max-width: 560px) {
+  .wrap {
+    width: 100%;
+  }
+}
+
 .input {
   width: 100%;
   appearance: none;

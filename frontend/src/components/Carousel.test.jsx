@@ -50,6 +50,13 @@ describe("Carousel", () => {
     expect(dotFor("VTI").className).not.toMatch(/highlighted/);
   });
 
+  it("leaves cards as the only tab stops, so keyboard users highlight dots from the cards", () => {
+    render(<Carousel carousel={CAROUSEL} onSelectAsset={vi.fn()} />);
+    const tabStops = screen.getAllByRole("button").filter((button) => button.tabIndex >= 0);
+    expect(tabStops.map((button) => button.dataset.symbol)).toEqual(["VTI", "AAPL", "VOO"]);
+    expect(tabStops.every((button) => /View details\.$/.test(button.getAttribute("aria-label")))).toBe(true);
+  });
+
   it("opens the same asset from a dot as from its card", () => {
     const onSelectAsset = vi.fn();
     render(<Carousel carousel={CAROUSEL} onSelectAsset={onSelectAsset} />);

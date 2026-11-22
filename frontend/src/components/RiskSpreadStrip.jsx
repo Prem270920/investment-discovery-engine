@@ -21,9 +21,12 @@ const ROW_INSET = (SEGMENT_WIDTH - ROW_SPAN) / 2;
 
 /**
  * Where a carousel's assets sit on the five step risk scale, one dot per
- * asset. Pointing at a dot (hover or keyboard focus) highlights its card and
- * clicking opens it; pointing at a card highlights its dot. The dots slide in
- * from the Calm end the first time the strip scrolls into view.
+ * asset. Hovering a dot highlights its card and clicking opens it; pointing
+ * at a card (hover or keyboard focus) highlights its dot. The dots stay out
+ * of the tab order: each one duplicates a card that is already a tab stop,
+ * so keyboard users reach the same highlight from the card without 56 extra
+ * stops. The dots slide in from the Calm end the first time the strip
+ * scrolls into view.
  */
 export default function RiskSpreadStrip({ assets, highlightedSymbol, onHighlight, onSelectAsset }) {
   const [plotRef, plotInView] = useInView({ threshold: 0.6 });
@@ -53,6 +56,7 @@ export default function RiskSpreadStrip({ assets, highlightedSymbol, onHighlight
               <button
                 key={dot.symbol}
                 type="button"
+                tabIndex={-1}
                 className={`${styles.dot} ${highlighted ? styles.highlighted : ""}`}
                 style={{
                   left,

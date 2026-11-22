@@ -14,7 +14,7 @@ export default function AssetCard({ asset, onSelect, highlighted = false, onHigh
   const tier = riskStyle(asset.risk_tier);
   
   const sharpe =
-    asset.sharpe_ratio != null ? asset.sharpe_ratio.toFixed(2) : "—";
+    asset.sharpe_ratio != null ? asset.sharpe_ratio.toFixed(2) : "n/a";
 
   return (
     <button
