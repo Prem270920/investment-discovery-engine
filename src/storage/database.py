@@ -1,8 +1,8 @@
 """
 Database engine and session setup.
 
-Central place where the DB connection lives. Everything else imports the session factory from here 
-— so migrating SQLite -> Postgres later is a ONE-LINE change to DATABASE_URL. 
+Central place where the DB connection lives. Everything else imports the session factory from here, 
+so migrating SQLite -> Postgres later is a ONE-LINE change to DATABASE_URL. 
 That's the payoff of using SQLAlchemy as an ORM rather than hand-writing sqlite3 calls.
 """
 

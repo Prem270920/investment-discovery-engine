@@ -67,7 +67,7 @@ class TestBeta:
 
     def test_aligns_on_shared_dates_only(self):
         """ASX and US markets have different holidays, so the two series must be
-        inner-joined on date. Mismatched rows would silently corrupt the result —
+        inner-joined on date. Mismatched rows would silently corrupt the result;
         this is the class of bug that produced beta 0.03 for IVV.AX.
         """
         asset = pd.Series(
@@ -80,7 +80,7 @@ class TestBeta:
             index=pd.to_datetime(["2025-01-02", "2025-01-06"]),
         )
 
-        # Only two overlapping days — enough to compute, and it must not raise.
+        # Only two overlapping days: enough to compute, and it must not raise.
         assert risk_metrics.beta(asset, bench) is not None
 
     def test_none_on_no_overlap(self):

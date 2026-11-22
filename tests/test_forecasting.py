@@ -4,7 +4,7 @@ the confidence band must widen with the horizon.
 
 A projection whose uncertainty stays flat tells a beginner that a 30-day
 forecast is as reliable as a 1-day one. That's the opposite of what this
-feature exists to communicate — and an early version of the returns path did
+feature exists to communicate, and an early version of the returns path did
 exactly that, because it applied single-step uncertainty instead of
 accumulating it.
 

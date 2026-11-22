@@ -26,7 +26,7 @@ logger = logging.getLogger("benchmarks")
 BENCHMARKS = {
     "^AXJO": {"name": "S&P/ASX 200", "market": "AU", "currency": "AUD"},
     "^GSPC": {"name": "S&P 500", "market": "US", "currency": "USD"},
-    # FX rate series — not a benchmark for beta, but a reference series needed
+    # FX rate series. Not a benchmark for beta, but a reference series needed
     # to currency-strip AUD-priced assets that track US underlyings (IVV.AX).
     "AUDUSD=X": {"name": "AUD/USD Exchange Rate", "market": "FX", "currency": "USD"},
 }
@@ -48,7 +48,7 @@ def _fetch_benchmark_history(symbol: str):
     return history, latest_close
 
 def _fetch_with_retry(symbol: str):
-    """One retry on failure — same resilience pattern as asset ingestion."""
+    """One retry on failure, the same resilience pattern as asset ingestion."""
     try:
         return _fetch_benchmark_history(symbol)
     except Exception as first_error:
@@ -94,7 +94,7 @@ def upsert_benchmark(session, symbol: str, meta: dict, latest_close: float) -> N
 def ingest_benchmarks(session) -> int:
     """Fetch and persist all benchmarks. Returns count of new price bars.
 
-    Takes a session (caller controls the transaction) — same pattern as the
+    Takes a session (caller controls the transaction), the same pattern as the
     asset repository, so benchmark + asset ingestion can share one atomic run.
     """
     new_bars = 0

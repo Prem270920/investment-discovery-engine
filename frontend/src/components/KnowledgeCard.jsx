@@ -4,7 +4,7 @@ import { riskStyle } from "../risk";
 import PriceChart from "./PriceChart";
 import styles from "./KnowledgeCard.module.css";
 
-/** Plain-language explainer assembled from OUR OWN data — the FALLBACK used
+/** Plain-language explainer assembled from OUR OWN data. This is the FALLBACK used
  * when no NLP-derived description exists (ASX ETFs return no source text). */
 function explain(asset) {
   const parts = [];
@@ -19,7 +19,7 @@ function explain(asset) {
     parts.push(
       `Although it trades on the Australian stock exchange in AUD, what it actually holds is ${
         asset.underlying_market === "US" ? "US companies" : "companies from around the world"
-      } — where it's listed and what it owns are different things.`
+      }. Where it's listed and what it owns are different things.`
     );
   }
 
@@ -28,12 +28,12 @@ function explain(asset) {
     const bench = asset.benchmark_symbol === "^GSPC" ? "the S&P 500" : "the ASX 200";
     if (asset.currency === "AUD" && asset.benchmark_symbol === "^GSPC") {
       parts.push(
-        `Its beta of ${b.toFixed(2)} against ${bench} looks low for what it holds — that's the currency effect: ` +
+        `Its beta of ${b.toFixed(2)} against ${bench} looks low for what it holds. That's the currency effect: ` +
         `because it's priced in Australian dollars, movements in the AUD/USD exchange rate soften its relationship ` +
         `with the US market. This is what you actually experience holding it unhedged.`
       );
     } else if (b > 1.15) {
-      parts.push(`With a beta of ${b.toFixed(2)}, it tends to amplify moves in ${bench} — bigger gains in rallies, bigger falls in downturns.`);
+      parts.push(`With a beta of ${b.toFixed(2)}, it tends to amplify moves in ${bench}, with bigger gains in rallies and bigger falls in downturns.`);
     } else if (b < 0.3) {
       parts.push(`With a beta of ${b.toFixed(2)}, it moves largely independently of ${bench}.`);
     } else {
@@ -141,7 +141,7 @@ export default function KnowledgeCard({ symbol, onClose }) {
                   {forecast.method === "returns"
                     ? "fitted to daily returns"
                     : "fitted to prices directly"}
-                  . The shaded band shows the range of plausible outcomes — notice it
+                  . The shaded band shows the range of plausible outcomes. Notice it
                   gets wider the further out it goes, because uncertainty compounds.
                 </p>
                 {forecast.backtest_error_pct != null && (
@@ -152,7 +152,7 @@ export default function KnowledgeCard({ symbol, onClose }) {
                     <span className="tnum" style={{ color: "var(--ink)", fontWeight: 600 }}>
                       {forecast.backtest_error_pct}%
                     </span>
-                    {" "}on average. Treat it as an illustration of a statistical trend —
+                    {" "}on average. Treat it as an illustration of a statistical trend,
                     not a prediction of what will happen.
                   </p>
                 )}
@@ -160,11 +160,11 @@ export default function KnowledgeCard({ symbol, onClose }) {
             )}
 
             <div className={styles.metrics}>
-              <Metric label="Volatility (1y)" value={asset.annualized_volatility != null ? `${(asset.annualized_volatility * 100).toFixed(1)}%` : "—"} />
-              <Metric label="Sharpe ratio" value={asset.sharpe_ratio?.toFixed(2) ?? "—"} />
-              <Metric label={`Beta vs ${asset.benchmark_symbol ?? "—"}`} value={asset.beta?.toFixed(2) ?? "—"} />
-              <Metric label="Dividend yield" value={asset.dividend_yield != null ? `${asset.dividend_yield.toFixed(2)}%` : "—"} />
-              <Metric label="P/E ratio" value={asset.trailing_pe?.toFixed(1) ?? "—"} />
+              <Metric label="Volatility (1y)" value={asset.annualized_volatility != null ? `${(asset.annualized_volatility * 100).toFixed(1)}%` : "n/a"} />
+              <Metric label="Sharpe ratio" value={asset.sharpe_ratio?.toFixed(2) ?? "n/a"} />
+              <Metric label={`Beta vs ${asset.benchmark_symbol ?? "benchmark"}`} value={asset.beta?.toFixed(2) ?? "n/a"} />
+              <Metric label="Dividend yield" value={asset.dividend_yield != null ? `${asset.dividend_yield.toFixed(2)}%` : "n/a"} />
+              <Metric label="P/E ratio" value={asset.trailing_pe?.toFixed(1) ?? "n/a"} />
               <Metric label="Latest close" value={`${asset.currency} ${asset.latest_close.toFixed(2)}`} />
             </div>
 
@@ -183,7 +183,7 @@ export default function KnowledgeCard({ symbol, onClose }) {
               )}
 
               <p className={styles.disclaimer}>
-                Educational information only — not financial advice.
+                Educational information only. Not financial advice.
               </p>
             </section>
 

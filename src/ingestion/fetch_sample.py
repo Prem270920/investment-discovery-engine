@@ -12,7 +12,7 @@ SAMPLE_TICKERS = ["VAS.AX", "CBA.AX", "VOO", "AAPL", "IVV.AX", "IVV"]
 FIELDS_OF_INTEREST = [
     "symbol",
     "shortName",
-    "quoteType",        # EQUITY vs ETF — matters for our categories
+    "quoteType",        # EQUITY vs ETF, which matters for our categories
     "currency",
     "sector",
     "beta",             # risk metric we need for carousels
@@ -33,8 +33,8 @@ def probe_ticker(symbol: str) -> None:
     info = ticker.info
     print("  Fundamentals (.info):")
     for field in FIELDS_OF_INTEREST:
-        # .get() so a missing field shows as None instead of crashing —
-        # missing fields are themselves a finding we want to observe.
+        # .get() so a missing field shows as None instead of crashing,
+        # because missing fields are themselves a finding we want to observe.
         value = info.get(field)
         print(f"    {field:<15} = {value!r}")
 
@@ -51,7 +51,7 @@ def probe_ticker(symbol: str) -> None:
 
 def main() -> None:
     print("Probing sample tickers via yfinance...")
-    print("(This is a read-only diagnostic — nothing is stored.)")
+    print("(This is a read-only diagnostic. Nothing is stored.)")
 
     for symbol in SAMPLE_TICKERS:
         try:

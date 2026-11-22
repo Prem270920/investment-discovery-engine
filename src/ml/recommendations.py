@@ -1,5 +1,5 @@
 """
-'Related assets' — sector/category match, ranked by risk similarity.
+'Related assets': sector/category match, ranked by risk similarity.
 
 WHAT THIS DOES: given an asset, find others a user would recognise as related.
 For Apple that means other technology companies; for a treasury ETF, other

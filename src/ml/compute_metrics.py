@@ -6,7 +6,7 @@ risk_metrics.py, and upserts one row per asset into asset_metrics.
 
 Benchmark selection: an asset's beta is measured against the
 benchmark for its UNDERLYING_MARKET, not its listing exchange. So IVV.AX
-(listed ASX, underlying US) is measured against ^GSPC — capturing its real
+(listed ASX, underlying US) is measured against ^GSPC, capturing its real
 risk character (it tracks the S&P 500), not its muted correlation with the ASX.
 """
 
@@ -61,7 +61,7 @@ def compute_and_store_metrics(session: Session) -> int:
                 bench_symbol, market,
             )
 
-    # Only compute for real, browsable assets — skip benchmarks
+    # Only compute for real, browsable assets; skip benchmarks
     assets = session.scalars(
         select(Asset).where(Asset.is_benchmark == False)  # noqa: E712
     ).all()
@@ -88,7 +88,7 @@ def compute_and_store_metrics(session: Session) -> int:
         # NOT a currency-stripped "pure underlying exposure" figure.
         #
         # Why: IVV.AX holds the S&P 500, so its currency-stripped beta "should"
-        # be ~1.0. But an unhedged AUD investor does NOT get 1:1 S&P exposure —
+        # be ~1.0. But an unhedged AUD investor does NOT get 1:1 S&P exposure:
         # AUD/USD movements partially offset the underlying's moves, diluting the
         # relationship to ~0.33. That dilution is REAL, not an artifact.
         #
@@ -101,7 +101,7 @@ def compute_and_store_metrics(session: Session) -> int:
         # was "right", we report the honest, FX-inclusive figure.
         #
         # WEEKLY (W-FRI) resampling is retained: it genuinely does fix the
-        # cross-market TIMEZONE misalignment (verified via a lag test — lag 0 is
+        # cross-market TIMEZONE misalignment (verified via a lag test: lag 0 is
         # optimal, so the weekly buckets are correctly aligned).
         bench_symbol = MARKET_TO_BENCHMARK.get(asset.underlying_market)
         bench_rets = benchmark_returns.get(bench_symbol)

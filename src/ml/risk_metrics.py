@@ -4,11 +4,11 @@ Pure risk-metric functions
 Each function takes price/return data and returns a number. 
 
 Metrics computed:
-  * daily returns       — the basis for everything else
-  * annualized volatility — how much the asset swings (risk proxy that works
-                            for ETFs too, unlike Yahoo's null beta)
-  * Sharpe ratio        — return per unit of risk
-  * beta                — sensitivity to a benchmark (covariance / variance)
+  * daily returns:         the basis for everything else
+  * annualized volatility: how much the asset swings (risk proxy that works
+                           for ETFs too, unlike Yahoo's null beta)
+  * Sharpe ratio:          return per unit of risk
+  * beta:                  sensitivity to a benchmark (covariance / variance)
 """
 
 import numpy as np
@@ -17,7 +17,7 @@ import pandas as pd
 # 252 trading days in a year
 TRADING_DAYS_PER_YEAR = 252
 
-# 52 weeks in a year — annualization factor for weekly-interval metrics.
+# 52 weeks in a year: the annualization factor for weekly-interval metrics.
 TRADING_WEEKS_PER_YEAR = 52
 
 # Fixed per-market risk-free rates (annual)
@@ -69,7 +69,7 @@ def weekly_returns(close_prices: pd.Series) -> pd.Series:
 def convert_to_usd(aud_close: pd.Series, audusd_close: pd.Series) -> pd.Series:
     """Convert an AUD-priced series to USD using the AUD/USD rate.
 
-    *** CURRENTLY UNUSED — retained for documentation. ***
+    *** CURRENTLY UNUSED. Retained for documentation. ***
     We built this to currency-strip cross-listed ETFs (IVV.AX) so their beta
     would reflect pure underlying exposure. It only recovered beta from 0.33 to
     0.67, not the expected ~1.0, because yfinance's daily FX bar and the ASX
@@ -167,7 +167,7 @@ def _self_test() -> None:
     sharpe = sharpe_ratio(rets, risk_free_annual=0.043)
     print(f"sharpe (rf=4.3%): {sharpe:.4f}")
 
-    # Beta of a series against ITSELF must equal exactly 1.0 — a perfect
+    # Beta of a series against ITSELF must equal exactly 1.0, which makes a perfect sanity check
     self_beta = beta(rets, rets)
     print(f"beta vs itself (must be 1.0): {self_beta:.6f}")
 

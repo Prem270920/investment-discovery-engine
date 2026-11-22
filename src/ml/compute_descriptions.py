@@ -35,7 +35,7 @@ def _describe_equity(text: str):
 
 
 def _describe_etf(text: str):
-    """ETF text is already short — keep it whole, gloss the jargon in it."""
+    """ETF text is already short, so keep it whole, gloss the jargon in it."""
     glossary = find_jargon(text)
     return text, json.dumps(glossary) if glossary else None
 
@@ -59,7 +59,7 @@ def compute_and_store_descriptions(session: Session) -> tuple[int, int]:
 
         text = info.get("longBusinessSummary")
         if not text:
-            # Expected for ASX ETFs — not an error, just nothing to process.
+            # Expected for ASX ETFs. Not an error, just nothing to process.
             skipped += 1
             continue
 

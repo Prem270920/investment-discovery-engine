@@ -146,7 +146,7 @@ def normalize_asset(raw: dict) -> NormalizedAsset:
         except (TypeError, ValueError):
             warnings.append(f"beta not numeric ({beta!r}); dropped")
             beta = None
-    # ETF beta being None is EXPECTED (confirmed in probe) — no warning.
+    # ETF beta being None is EXPECTED (confirmed in probe), so no warning.
 
     market_cap = raw.get("marketCap")
     if market_cap is not None:
@@ -188,20 +188,20 @@ def _self_test() -> None:
     """Runs the normalizer against the real probe data so we can see it work
     without hitting the network. These dicts mirror our Step 3 output."""
     samples = [
-        {  # ETF, ASX-listed, AU exposure — clean
+        {  # ETF, ASX-listed, AU exposure, clean
             "symbol": "VAS.AX", "shortName": "V300AEQ ETF UNITS [VAS]",
             "quoteType": "ETF", "currency": "AUD", "sector": None,
             "beta": None, "dividendYield": 3.14, "marketCap": None,
             "trailingPE": 20.696411, "latest_close": 108.16,
         },
-        {  # EQUITY, ASX-listed, AU — full fundamentals
+        {  # EQUITY, ASX-listed, AU, full fundamentals
             "symbol": "CBA.AX", "shortName": "CWLTH BANK FPO [CBA]",
             "quoteType": "EQUITY", "currency": "AUD",
             "sector": "Financial Services", "beta": 0.802,
             "dividendYield": 3.07, "marketCap": 269446021120,
             "trailingPE": 25.906754, "latest_close": 161.14,
         },
-        {  # ETF, ASX-listed, but US underlying — the edge case
+        {  # ETF, ASX-listed, but US underlying: the edge case
             "symbol": "IVV.AX", "shortName": "ISCS&P500 ETF UNITS [IVV]",
             "quoteType": "ETF", "currency": "AUD", "sector": None,
             "beta": None, "dividendYield": 0.97, "marketCap": None,

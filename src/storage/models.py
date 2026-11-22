@@ -2,8 +2,8 @@
 SQLAlchemy ORM models
 
 Two tables:
-  * Asset  — one row per ticker (upsert-by-symbol on each run)
-  * Price  — daily OHLCV bars (insert-new-dates-only)
+  * Asset: one row per ticker (upsert-by-symbol on each run)
+  * Price: daily OHLCV bars (insert-new-dates-only)
 
 The Price.symbol -> Asset.symbol foreign key enforces referential integrity
 """
@@ -47,7 +47,7 @@ class Asset(Base):
 
     # Nullable fields
     sector: Mapped[str | None] = mapped_column(String, nullable=True)
-    # ETF equivalent of sector — 'Long Government', 'Equity Energy', etc.
+    # ETF equivalent of sector, e.g. 'Long Government', 'Equity Energy', etc.
     category: Mapped[str | None] = mapped_column(String, nullable=True)
     beta: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -185,7 +185,7 @@ class AssetDescription(Base):
     asset: Mapped["Asset"] = relationship()
 
 class AssetMetric(Base):
-    """Computed risk metrics for one asset in separate table — recomputed each ingestion run.
+    """Computed risk metrics for one asset in separate table, recomputed each ingestion run.
 
     `beta` here is OUR computed beta (covariance / benchmark variance)
     """
@@ -198,11 +198,11 @@ class AssetMetric(Base):
     beta: Mapped[float | None] = mapped_column(Float, nullable=True)
     benchmark_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Clustering output — recomputed each run.
+    # Clustering output, recomputed each run.
     cluster_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cluster_label: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Risk tier — quantile-based (quintile) bucket of annualized volatility across the universe, computed each run
+    # Risk tier: quantile-based (quintile) bucket of annualized volatility across the universe, computed each run
     risk_tier: Mapped[str | None] = mapped_column(String, nullable=True)
 
     computed_at: Mapped[datetime] = mapped_column(

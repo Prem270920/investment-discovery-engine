@@ -32,12 +32,12 @@ export async function getCarousels(underlyingMarket = null, minSize = 1) {
   return request(`/api/carousels${query ? `?${query}` : ""}`);
 }
 
-/** Fetch full detail for one asset — for the Knowledge Card. */
+/** Fetch full detail for one asset, for the Knowledge Card. */
 export async function getAsset(symbol) {
   return request(`/api/assets/${encodeURIComponent(symbol)}`);
 }
 
-/** Fetch price history for one asset — for the chart. */
+/** Fetch price history for one asset, for the chart. */
 export async function getPrices(symbol, days = 365) {
   return request(`/api/assets/${encodeURIComponent(symbol)}/prices?days=${days}`);
 }

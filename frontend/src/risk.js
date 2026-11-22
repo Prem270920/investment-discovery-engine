@@ -2,7 +2,7 @@
  * Presentation helper for risk tiers
  *
  * The RISK TIER itself is computed in the backend (quantile buckets of
- * volatility across the universe — view clustering.py)
+ * volatility across the universe; see clustering.py)
  */
 
 const TIER_STYLES = {

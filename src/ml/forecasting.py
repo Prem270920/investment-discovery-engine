@@ -1,5 +1,5 @@
 """
-ARIMA forecasting engine — validated returns-vs-price approach.
+ARIMA forecasting engine: validated returns-vs-price approach.
 
 For each asset we fit TWO competing ARIMA models:
   * PRICE model:   ARIMA on raw closing prices 
@@ -30,7 +30,7 @@ HORIZON_DAYS = 30   # 6 trading weeks
 BACKTEST_DAYS = 30  # held-out window for measuring error
 CONFIDENCE = 0.05  
 
-# AIC grid — kept modest so 56 assets x 2 models stays tractable
+# AIC grid, kept modest so 56 assets x 2 models stays tractable
 P_RANGE = range(0, 3)
 D_RANGE = range(0, 2)
 Q_RANGE = range(0, 3)

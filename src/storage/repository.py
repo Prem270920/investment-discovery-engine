@@ -1,5 +1,5 @@
 """
-Repository — the single gateway for persisting data
+Repository: the single gateway for persisting data
 
 Persistence rules:
   * assets  -> UPSERT BY SYMBOL: update the existing row if present, else insert.
@@ -49,7 +49,7 @@ def upsert_asset(session: Session, asset: NormalizedAsset) -> None:
         session.add(row)
         logger.info("inserted new asset %s", asset.symbol)
     else:
-        # Update path — refresh the mutable facts.
+        # Update path: refresh the mutable facts.
         existing.short_name = asset.short_name
         existing.quote_type = asset.quote_type
         existing.currency = asset.currency
@@ -84,7 +84,7 @@ def insert_new_prices(session: Session, symbol: str, history: pd.DataFrame) -> i
     for ts, bar in history.iterrows():
         bar_date = ts.date()
         if bar_date in existing_dates:
-            continue  # immutable fact already stored — skip.
+            continue  # immutable fact already stored, so skip.
 
         session.add(
             Price(

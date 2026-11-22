@@ -1,4 +1,6 @@
 .card {
+  /* Contains the visually hidden Sharpe explainer */
+  position: relative;
   appearance: none;
   border: 1px solid var(--hairline);
   text-align: left;
@@ -31,24 +33,20 @@
   outline-offset: 2px;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.badgeLabel {
+/* Risk chip: the tier's plain label in its risk temperature colour */
+.chip {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  /* A quarter ink lifts the text off its own tint: worst case is 5.09:1
+     (tier 5 on the hover background), where pure tier colour gave 4.02:1. */
+  color: color-mix(in srgb, var(--chip-color) 75%, var(--ink));
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-muted);
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .symbol {
@@ -65,6 +63,31 @@
   text-overflow: ellipsis;
 }
 
+/* Space is held for the sparkline at rest so the card never changes size */
+.spark {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.sparkLine {
+  fill: none;
+  stroke: var(--spark-color);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  /* Undrawn until the card is pointed at, then traced left to right */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 700ms var(--ease-out);
+}
+
+.card:hover .sparkLine,
+.card:focus-visible .sparkLine,
+.highlighted .sparkLine {
+  stroke-dashoffset: 0;
+}
+
 .metric {
   display: flex;
   align-items: baseline;
@@ -75,12 +98,52 @@
 }
 
 .metricLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   color: var(--ink-muted);
+}
+
+/* Small "i" that explains Sharpe on hover */
+.info {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--ink-muted);
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 600;
+  font-style: italic;
+  line-height: 1;
+  cursor: help;
+}
+
+.info:hover {
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 .metricValue {
   font-size: 15px;
   font-weight: 600;
   margin-left: auto;
+  transform-origin: right center;
+  transition: scale var(--duration-fast) var(--ease-standard);
+}
+
+.card:hover .metricValue,
+.card:focus-visible .metricValue,
+.highlighted .metricValue {
+  scale: 1.1;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

@@ -1,0 +1,16 @@
+.tip {
+  position: fixed;
+  z-index: 40;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  pointer-events: none;
+}
+
+.below { transform: translateX(-50%); }
+.above { transform: translate(-50%, -100%); }

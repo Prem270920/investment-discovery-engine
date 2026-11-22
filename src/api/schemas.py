@@ -84,6 +84,16 @@ class HealthStatus(BaseModel):
     capabilities: Capabilities = Capabilities()
 
 
+class CarouselAsset(AssetSummary):
+    """An asset as it appears on a dashboard card. Adds a thinned price
+    series for the card's hover sparkline, so the dashboard doesn't need one
+    prices request per card. Only the carousels endpoint carries it; every
+    other AssetSummary payload is unchanged."""
+    # About 30 evenly spaced closes from the last 90 stored trading days,
+    # oldest first. Null when fewer than two prices are stored.
+    sparkline_closes: list[float] | None = None
+
+
 class Carousel(BaseModel):
     """One themed row in the Netflix-style UI: a cluster, surfaced as a "carousel" of assets."""
     label: str
@@ -92,7 +102,7 @@ class Carousel(BaseModel):
     avg_volatility: float | None = None
     avg_sharpe: float | None = None
     avg_beta: float | None = None
-    assets: list[AssetSummary] # ranked, best Sharpe first
+    assets: list[CarouselAsset] # ranked, best Sharpe first
 
 
 class CarouselsResponse(BaseModel):

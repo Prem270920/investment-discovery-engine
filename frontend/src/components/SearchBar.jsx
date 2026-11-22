@@ -4,7 +4,7 @@ import { riskStyle } from "../risk";
 import styles from "./SearchBar.module.css";
 
 /**
- * Search box with a live results dropdown. Debounced so we don't fire a request on every keystroke — waits until typing pauses.
+ * Search box with a live results dropdown. Debounced so we don't fire a request on every keystroke: it waits until typing pauses.
  */
 export default function SearchBar({ onSelectAsset }) {
   const [query, setQuery] = useState("");

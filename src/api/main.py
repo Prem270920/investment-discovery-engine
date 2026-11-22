@@ -24,6 +24,7 @@ from src.api.schemas import (
     BenchmarkPriceHistory,
     Capabilities,
     Carousel,
+    CarouselAsset,
     CarouselsResponse,
     ForecastLens,
     ForecastLenses,
@@ -51,6 +52,10 @@ logger = logging.getLogger("api")
 # a test fails if either drifts.
 HOLDOUT_DAYS = 30
 GRU_STATUS_OK = "ok"
+
+# Card sparklines: the last 90 trading days, thinned to 30 points.
+SPARKLINE_WINDOW = 90
+SPARKLINE_POINTS = 30
 
 app = FastAPI(
     title="Investment Discovery Engine",
@@ -119,6 +124,51 @@ def _asset_with_metrics(db: Session, asset: Asset) -> dict:
         "risk_tier": metric.risk_tier if metric else None, 
         "metrics_computed_at": metric.computed_at if metric else None,
     }
+
+
+def _sparkline_closes(db: Session, symbols: list[str]) -> dict[str, list[float]]:
+    """About SPARKLINE_POINTS evenly spaced closes from each symbol's last
+    SPARKLINE_WINDOW stored bars, oldest first.
+
+    Thinning keeps the shape of three months of moves while sending a
+    fraction of the numbers; a card is too small to show more anyway. The
+    first and last kept closes are always the window's first and last, so
+    the line starts and ends where the real prices do. Symbols with fewer
+    than two stored closes are left out, since one point is not a line.
+    """
+    if not symbols:
+        return {}
+    newest_first = (
+        func.row_number()
+        .over(partition_by=Price.symbol, order_by=Price.date.desc())
+        .label("bars_back")
+    )
+    recent = (
+        select(Price.symbol, Price.date, Price.close, newest_first)
+        .where(Price.symbol.in_(symbols))
+        .subquery()
+    )
+    rows = db.execute(
+        select(recent.c.symbol, recent.c.close)
+        .where(recent.c.bars_back <= SPARKLINE_WINDOW)
+        .order_by(recent.c.symbol, recent.c.date)
+    ).all()
+
+    window_closes: dict[str, list[float]] = {}
+    for symbol, close in rows:
+        window_closes.setdefault(symbol, []).append(close)
+
+    thinned: dict[str, list[float]] = {}
+    for symbol, closes in window_closes.items():
+        if len(closes) < 2:
+            continue
+        if len(closes) <= SPARKLINE_POINTS:
+            thinned[symbol] = closes
+            continue
+        last = len(closes) - 1
+        picks = [round(step * last / (SPARKLINE_POINTS - 1)) for step in range(SPARKLINE_POINTS)]
+        thinned[symbol] = [closes[pick] for pick in picks]
+    return thinned
 
 
 @app.get("/api/health", response_model=HealthStatus, tags=["system"])
@@ -232,6 +282,9 @@ def get_carousels(
         for r in meta_rows
     }
 
+    # One query for every card's sparkline rather than one per asset.
+    sparklines = _sparkline_closes(db, [asset.symbol for asset, _ in rows])
+
     carousels: list[Carousel] = []
     for cluster_id, members in grouped.items():
         if len(members) < min_size:
@@ -248,7 +301,11 @@ def get_carousels(
         )
 
         summaries = [
-            AssetSummary(**_asset_with_metrics(db, asset)) for asset, _ in members
+            CarouselAsset(
+                **_asset_with_metrics(db, asset),
+                sparkline_closes=sparklines.get(asset.symbol),
+            )
+            for asset, _ in members
         ]
 
         carousels.append(Carousel(

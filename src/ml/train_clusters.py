@@ -7,9 +7,9 @@ human labels from the resulting centroids, and saves all three (scaler, model,
 labels) as a single versioned artifact.
 
 The artifact bundles:
-  * scaler  — the fitted StandardScaler (frozen mean/variance)
-  * model   — the fitted KMeans (frozen centroids)
-  * labels  — cluster_id -> human label, FROZEN at train time
+  * scaler: the fitted StandardScaler (frozen mean/variance)
+  * model:  the fitted KMeans (frozen centroids)
+  * labels: cluster_id -> human label, FROZEN at train time
 """
 
 import logging
@@ -72,32 +72,32 @@ def _derive_labels(centroids: pd.DataFrame) -> dict[int, str]:
             labels[cluster_id] = label
             claimed.add(cluster_id)
 
-    # SAFE & STEADY first — lowest volatility
+    # SAFE & STEADY first: lowest volatility
     claim(centroids["annualized_volatility"].idxmin(), "Safe & Steady")
 
-    # UNDERPERFORMERS — worst Sharpe among the REST, if genuinely negative.
+    # UNDERPERFORMERS: worst Sharpe among the REST, if genuinely negative.
     rest = centroids.drop(index=list(claimed))
     if not rest.empty:
         worst = rest["sharpe_ratio"].idxmin()
         if rest.loc[worst, "sharpe_ratio"] < UNDERPERFORMER_SHARPE_CEILING:
             claim(worst, "Recent Underperformers")
 
-    #Market-Neutral — beta closest to zero.
+    #Market-Neutral: beta closest to zero.
     rest = centroids.drop(index=list(claimed))
     if not rest.empty:
         claim(rest["beta"].abs().idxmin(), "Market-Neutral Defensives")
 
-    #Higher-Risk Growth — highest BETA (not volatility; see prior fix).
+    #Higher-Risk Growth: highest BETA (not volatility; see prior fix).
     rest = centroids.drop(index=list(claimed))
     if not rest.empty:
         claim(rest["beta"].idxmax(), "Higher-Risk Growth")
 
-    # Income Generators — highest dividend yield.
+    # Income Generators: highest dividend yield.
     rest = centroids.drop(index=list(claimed))
     if not rest.empty:
         claim(rest["dividend_yield"].idxmax(), "Income Generators")
 
-    #Broad Market Core — largest remaining cluster.
+    #Broad Market Core: largest remaining cluster.
     rest = centroids.drop(index=list(claimed))
     if not rest.empty:
         claim(rest["size"].idxmax(), "Broad Market Core")
@@ -119,7 +119,7 @@ def _derive_labels(centroids: pd.DataFrame) -> dict[int, str]:
 def train() -> None:
     df = _load_features()
     if len(df) < N_CLUSTERS:
-        logger.error("only %d assets — need >= %d to train", len(df), N_CLUSTERS)
+        logger.error("only %d assets, need >= %d to train", len(df), N_CLUSTERS)
         return
 
     X = df[FEATURES].values
@@ -145,7 +145,7 @@ def train() -> None:
         members = df[df["cluster_id"] == cid]["symbol"].tolist()
         logger.info("  [%s] %d: %s", labels[cid], len(members), ", ".join(members))
 
-    # SAVE the artifact — scaler + model + frozen labels + provenance.
+    # SAVE the artifact: scaler + model + frozen labels + provenance.
     artifact = {
         "scaler": scaler,
         "model": model,

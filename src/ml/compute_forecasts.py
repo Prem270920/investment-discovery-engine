@@ -39,7 +39,7 @@ def _future_trading_dates(last_date, n: int) -> list:
     """Generate the next n weekday dates after last_date.
 
     Approximation: we skip weekends but not public holidays, since holiday
-    calendars differ per exchange. Forecast dates are indicative anyway — the
+    calendars differ per exchange. Forecast dates are indicative anyway: the
     projection is educational, so exact calendar alignment isn't meaningful.
     """
     dates = []

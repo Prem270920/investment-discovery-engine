@@ -63,7 +63,7 @@ def split_sentences(text: str):
 def count_syllables(word: str):
     """Approximate syllable count by counting vowel groups.
 
-    A heuristic, not a dictionary lookup — accurate enough for a readability
+    A heuristic, not a dictionary lookup, but accurate enough for a readability
     score computed over hundreds of words, where individual errors average out.
     """
     word = word.lower().strip(".,;:!?\"'()")
@@ -132,7 +132,7 @@ def _sentence_readability(sentence: str) -> float:
     """Flesch score for a single sentence we already know is one sentence.
 
     Separate from flesch_reading_ease() so we don't re-run the splitter on
-    something already split — and so a short sentence can't fail the split
+    something already split, and so a short sentence can't fail the split
     and come back as None.
     """
     words = re.findall(r"\b[\w'-]+\b", sentence)
@@ -168,7 +168,7 @@ def extractive_summary(text: str, max_sentences: int = 3, centrality_weight: flo
     """Select sentences by a blend of centrality and readability.
 
     HOW IT WORKS:
-      1. TF-IDF vectorise each sentence — terms weighted by how distinctive
+      1. TF-IDF vectorise each sentence, with terms weighted by how distinctive
          they are to that sentence relative to the document.
       2. Cosine similarity between every pair of sentences.
       3. DEGREE CENTRALITY: sum each sentence's similarity to all others. A
@@ -215,7 +215,7 @@ JARGON = {
     "equity securities":
         "shares in companies",
     "fixed income":
-        "bonds — loans to governments or companies that pay regular interest",
+        "bonds, which are loans to governments or companies that pay regular interest",
     "market capitalization":
         "the total value of all a company's shares",
     "diversified":
@@ -223,7 +223,7 @@ JARGON = {
     "large-cap":
         "large, well-established companies",
     "small-cap":
-        "smaller companies — usually more volatile",
+        "smaller companies, usually more volatile",
     "benchmark index":
         "a standard list of investments used to measure performance against",
     "net assets":
@@ -267,7 +267,7 @@ def _self_test() -> None:
         "securities that have a remaining maturity greater than twenty years."
     )
 
-    print("EQUITY — extractive summarization")
+    print("EQUITY: extractive summarization")
     print("-" * 60)
     sents = split_sentences(equity)
     print(f"source: {len(sents)} sentences, {len(equity)} chars")
@@ -291,7 +291,7 @@ def _self_test() -> None:
           f"-> {after} ({reading_level(after)})")
     print(f"summary: {summary}\n")
 
-    print("ETF — jargon glossing")
+    print("ETF: jargon glossing")
     print("-" * 60)
     print(f"source: {len(split_sentences(etf))} sentences")
     for item in find_jargon(etf):

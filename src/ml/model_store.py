@@ -8,7 +8,7 @@ from pathlib import Path
 
 import joblib
 
-# The committed model artifact — see train_clusters.py. Lives under models/ at project root
+# The committed model artifact; see train_clusters.py. Lives under models/ at project root
 MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "cluster_model.joblib"
 
 # Features the model is trained on 

@@ -1,5 +1,5 @@
 """
-Clustering Inference — assign assets to the pre-trained model's clusters
+Clustering Inference: assign assets to the pre-trained model's clusters
 
 This no longer fits anything. It LOADS the model trained by train_clusters.py
 and uses scaler.transform() + model.predict() to assign each asset to an
@@ -44,14 +44,14 @@ def _load_features(session: Session) -> pd.DataFrame:
     incomplete = df[df[FEATURES].isna().any(axis=1)]
     if not incomplete.empty:
         logger.warning(
-            "excluded %d asset(s) from clustering — missing metrics: %s",
+            "excluded %d asset(s) from clustering, missing metrics: %s",
             len(incomplete), ", ".join(incomplete["symbol"].tolist()),
         )
     return df.dropna(subset=FEATURES).reset_index(drop=True)
 
 
 def _assign_risk_tiers(df: pd.DataFrame) -> pd.Series:
-    """Quintile risk tiers by volatility — relative to the current universe."""
+    """Quintile risk tiers by volatility, relative to the current universe."""
     try:
         return pd.qcut(
             df["annualized_volatility"], q=len(RISK_TIER_LABELS),
@@ -83,7 +83,7 @@ def cluster_and_store(session: Session) -> int:
     X_scaled = scaler.transform(df[FEATURES].values)
     df["cluster_id"] = model.predict(X_scaled)
 
-    # Risk tiers — computed fresh each run
+    # Risk tiers, computed fresh each run
     df["risk_tier"] = _assign_risk_tiers(df)
 
     tier_summary = (

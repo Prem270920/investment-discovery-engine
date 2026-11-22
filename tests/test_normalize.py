@@ -107,7 +107,7 @@ class TestQuoteTypeAwareWarnings:
 class TestVendorCorrections:
     def test_quote_type_override_applies_and_leaves_a_trail(self):
         """yfinance misreports VTS.AX as EQUITY; it's an ETF. We correct known-bad
-        vendor data — but never silently."""
+        vendor data, but never silently."""
         asset = normalize_asset(raw(symbol="VTS.AX", quoteType="EQUITY"))
 
         assert asset.quote_type == "ETF"
