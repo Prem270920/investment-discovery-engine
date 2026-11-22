@@ -42,6 +42,11 @@ export async function getPrices(symbol, days = 365) {
   return request(`/api/assets/${encodeURIComponent(symbol)}/prices?days=${days}`);
 }
 
+/** Fetch a benchmark index's stored prices (^GSPC, ^AXJO), with its name. */
+export async function getBenchmarkPrices(symbol, days = 365) {
+  return request(`/api/benchmarks/${encodeURIComponent(symbol)}/prices?days=${days}`);
+}
+
 /** Health check */
 export async function getHealth() {
   return request("/api/health");

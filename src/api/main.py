@@ -21,6 +21,7 @@ from src.api.schemas import (
     AssetDescriptionResponse,
     AssetDetail,
     AssetSummary,
+    BenchmarkPriceHistory,
     Capabilities,
     Carousel,
     CarouselsResponse,
@@ -405,6 +406,43 @@ def get_prices(
         symbol=asset.symbol,
         points=[PricePoint(date=r[0], close=r[1]) for r in rows],
     )
+
+@app.get(
+    "/api/benchmarks/{symbol}/prices",
+    response_model=BenchmarkPriceHistory,
+    tags=["benchmarks"],
+)
+def get_benchmark_prices(
+    symbol: str,
+    db: Session = Depends(get_db),
+    days: int = Query(
+        365, ge=7, le=2000,
+        description="How many days of history to return",
+    ),
+) -> BenchmarkPriceHistory:
+    """Stored price history for a benchmark index (^GSPC, ^AXJO, ...).
+
+    The asset prices endpoint deliberately refuses benchmarks so they never
+    show up as investable picks; this route serves them only as context. It
+    reads stored rows and never calls out to a data feed.
+    """
+    benchmark = db.get(Asset, symbol.upper())
+    if benchmark is None or not benchmark.is_benchmark:
+        raise HTTPException(status_code=404, detail=f"Benchmark '{symbol}' not found")
+
+    cutoff = date.today() - timedelta(days=days)
+    rows = db.execute(
+        select(Price.date, Price.close)
+        .where(Price.symbol == benchmark.symbol, Price.date >= cutoff)
+        .order_by(Price.date)
+    ).all()
+
+    return BenchmarkPriceHistory(
+        symbol=benchmark.symbol,
+        name=benchmark.short_name,
+        points=[PricePoint(date=row[0], close=row[1]) for row in rows],
+    )
+
 
 @app.get(
     "/api/assets/{symbol}/forecast",

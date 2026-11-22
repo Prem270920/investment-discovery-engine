@@ -51,3 +51,14 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* Too narrow for all four market tabs: start them at the left edge and let
+   the row scroll sideways, instead of overflowing off the left where the
+   first tab could not be reached. */
+@media (max-width: 560px) {
+  .controls {
+    padding: 16px 16px 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+}

@@ -19,7 +19,8 @@
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
-.card:hover {
+.card:hover,
+.highlighted {
   transform: translateY(-4px);
   background: var(--bg-hover);
   border-color: var(--accent);

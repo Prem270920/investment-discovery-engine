@@ -6,8 +6,11 @@ import styles from "./AssetCard.module.css";
  * Clicking it opens the Knowledge Card
  *
  * The risk badge reflects the backend's quantile risk_tier
+ *
+ * highlighted lights the card up when its dot on the risk spread strip is
+ * pointed at; onHighlight reports the reverse, so the strip can light the dot.
  */
-export default function AssetCard({ asset, onSelect }) {
+export default function AssetCard({ asset, onSelect, highlighted = false, onHighlight = () => {} }) {
   const tier = riskStyle(asset.risk_tier);
   
   const sharpe =
@@ -15,8 +18,13 @@ export default function AssetCard({ asset, onSelect }) {
 
   return (
     <button
-      className={styles.card}
+      className={`${styles.card} ${highlighted ? styles.highlighted : ""}`}
+      data-symbol={asset.symbol}
       onClick={() => onSelect(asset.symbol)}
+      onMouseEnter={() => onHighlight(asset.symbol)}
+      onMouseLeave={() => onHighlight(null)}
+      onFocus={() => onHighlight(asset.symbol)}
+      onBlur={() => onHighlight(null)}
       aria-label={`${asset.symbol}, ${tier.label}. View details.`}
     >
       <span className={styles.badge}>

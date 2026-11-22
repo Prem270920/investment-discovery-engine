@@ -1,11 +1,26 @@
 .row {
-  margin-bottom: 40px;
+  margin-bottom: var(--space-5);
+  padding: var(--space-5) var(--space-5) var(--space-3);
+  border-radius: var(--radius-lg);
+  /* A breath of the group's risk temperature over navy. Kept at 6% so text
+     contrast barely moves: muted text measures 4.97:1 on the tier 1 tint and
+     5.09:1 on tier 5, both above the 4.5:1 AA line. */
+  background: color-mix(in srgb, var(--section-temp, transparent) 6%, transparent);
+}
+
+@media (max-width: 560px) {
+  .row {
+    padding: var(--space-4) var(--space-3) var(--space-2);
+  }
 }
 
 .header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  /* The count drops to its own line when the strip leaves no room beside it */
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
   margin-bottom: 14px;
   padding-right: 8px;
 }

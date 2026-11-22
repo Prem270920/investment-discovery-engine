@@ -1,0 +1,164 @@
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "copy readout"
+    "chart chart";
+  gap: var(--space-4) var(--space-6);
+  align-items: end;
+  margin-bottom: var(--space-6);
+}
+
+/* Holds the hero's height while the prices load, so the carousels below
+   don't jump when it arrives. */
+.waiting {
+  min-height: 330px;
+}
+
+.copy {
+  grid-area: copy;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-display-size);
+  font-weight: var(--type-display-weight);
+  line-height: var(--type-display-leading);
+}
+
+.note {
+  margin: var(--space-2) 0 0;
+  max-width: 52ch;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-leading);
+  color: var(--ink-muted);
+}
+
+.readout {
+  grid-area: readout;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  text-align: right;
+}
+
+.level {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.readoutDetail {
+  display: flex;
+  gap: var(--space-3);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.up { color: var(--risk-temp-1); }
+.down { color: var(--risk-temp-5); }
+
+.changeLabel {
+  color: var(--ink-muted);
+}
+
+.range {
+  font-size: var(--type-caption-size);
+  color: var(--ink-muted);
+}
+
+.chart {
+  grid-area: chart;
+  position: relative;
+  height: 180px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: crosshair;
+  touch-action: pan-y;
+  border-radius: var(--radius-sm);
+}
+
+.chart:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Draws itself from left to right once the chart is on screen. A clip wipe
+   rather than a stroke dash: dashes are measured before the SVG is
+   stretched to fit, so with a non-scaling stroke they stop short. */
+.chart svg {
+  clip-path: inset(-4px 100% -4px 0);
+  transition: clip-path 1200ms var(--ease-out);
+}
+
+.drawn svg {
+  clip-path: inset(-4px 0 -4px 0);
+}
+
+.line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ink-muted);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guide.visible { opacity: 0.6; }
+
+.marker {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  /* Centred on the point: half of 9px plus the 2px border */
+  margin: -6.5px 0 0 -6.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-deep);
+  box-sizing: content-box;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "copy"
+      "readout"
+      "chart";
+  }
+
+  .readout {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .chart { height: 140px; }
+}

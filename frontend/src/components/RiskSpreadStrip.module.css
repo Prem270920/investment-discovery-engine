@@ -1,0 +1,95 @@
+.strip {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.scale {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.plot {
+  position: relative;
+}
+
+.track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 3px;
+}
+
+.segment {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  opacity: 0.55;
+}
+
+.dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--dot-color);
+  cursor: pointer;
+  appearance: none;
+
+  /* Waiting at the Calm end until the strip is revealed */
+  opacity: 0;
+  transform: translateX(var(--slide-from));
+  /* Only the slide in is staggered; highlighting responds at once */
+  transition:
+    transform var(--duration-reveal) var(--ease-out) var(--reveal-delay, 0ms),
+    opacity var(--duration-slow) var(--ease-out) var(--reveal-delay, 0ms),
+    scale var(--duration-fast) var(--ease-standard);
+}
+
+/* A larger invisible hit area, since an 8px target is hard to point at */
+.dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+}
+
+.revealed .dot {
+  opacity: 1;
+  transform: none;
+}
+
+/* Scale is its own property so highlighting never fights the slide in */
+.dot:hover,
+.highlighted {
+  scale: 1.6;
+  outline: 1.5px solid var(--ink);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.dot:focus-visible {
+  scale: 1.6;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+.ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.caption {
+  margin: 0 0 15px;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  color: var(--ink-muted);
+}

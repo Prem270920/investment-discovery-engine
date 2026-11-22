@@ -5,6 +5,20 @@ import KnowledgeCard from "./components/KnowledgeCard";
 import MarketFilter from "./components/MarketFilter";
 import styles from "./App.module.css";
 import SearchBar from "./components/SearchBar";
+import BenchmarkHero from "./components/BenchmarkHero";
+
+// Which index the hero shows for each market filter, and why it matters.
+// Matches the stored data: Australian assets measure beta against ^AXJO,
+// US and global assets against ^GSPC.
+const BACKDROP_FOR_MARKET = {
+  AU: { symbol: "^AXJO", note: "Every Australian asset below measures its beta against this index." },
+  US: { symbol: "^GSPC", note: "Every US asset below measures its beta against this index." },
+  GLOBAL: { symbol: "^GSPC", note: "Every global asset below measures its beta against this index." },
+};
+const DEFAULT_BACKDROP = {
+  symbol: "^GSPC",
+  note: "US and global assets below measure their beta against this index; Australian assets use the S&P/ASX 200.",
+};
 
 function App() {
   const [carousels, setCarousels] = useState(null);
@@ -61,6 +75,7 @@ function App() {
       </div>
 
       <main className={styles.main}>
+        <BenchmarkHero {...(BACKDROP_FOR_MARKET[market] ?? DEFAULT_BACKDROP)} />
         {!carousels ? (
           <div className={styles.state}>Loading your dashboard…</div>
         ) : carousels.length === 0 ? (

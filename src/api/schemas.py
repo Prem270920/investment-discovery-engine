@@ -61,6 +61,12 @@ class PriceHistory(BaseModel):
     points: list[PricePoint]
 
 
+class BenchmarkPriceHistory(PriceHistory):
+    """A benchmark index's price series, for the dashboard hero. Carries the
+    stored display name so the UI never has to hardcode one per symbol."""
+    name: str
+
+
 class Capabilities(BaseModel):
     """Optional features the stored data can currently back, so the UI can
     hide a feature instead of rendering it half empty."""
