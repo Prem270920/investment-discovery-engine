@@ -11,6 +11,8 @@ Persistence rules:
                backstop that makes duplicates impossible.
   * forecasts -> REPLACE PER LENS: each run swaps out one model's projection
                for an asset and leaves the other model's rows alone.
+  * backtest predictions -> REPLACE PER LENS, the same way, so a rerun of one
+               model never strands or overwrites the other's replay.
 """
 
 
@@ -21,7 +23,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from src.processing.normalize import NormalizedAsset
-from src.storage.models import ARIMA_LENS, Asset, Forecast, ForecastMeta, Price
+from src.storage.models import ARIMA_LENS, Asset, BacktestPrediction, Forecast, ForecastMeta, Price
 
 logger = logging.getLogger("storage")
 
@@ -140,6 +142,47 @@ def get_forecast_points(
         select(Forecast)
         .where(Forecast.symbol == symbol, Forecast.lens == lens)
         .order_by(Forecast.date)
+    ).all())
+
+
+def replace_backtest(
+    session: Session,
+    symbol: str,
+    lens: str,
+    dates: list,
+    actual: list[float],
+    predicted: list[float],
+) -> int:
+    """Swap in one lens's backtest replay for an asset. Returns the days written.
+
+    Empty lists clear the lens, which is how a failed or skipped model drops a
+    replay that no longer has a score behind it.
+    """
+    if not (len(dates) == len(actual) == len(predicted)):
+        raise ValueError(f"{symbol}: backtest columns have mismatched lengths")
+
+    session.execute(
+        delete(BacktestPrediction).where(
+            BacktestPrediction.symbol == symbol, BacktestPrediction.lens == lens
+        )
+    )
+    for held_out_day, real_close, predicted_close in zip(dates, actual, predicted):
+        session.add(BacktestPrediction(
+            symbol=symbol,
+            lens=lens,
+            date=held_out_day,
+            actual=float(real_close),
+            predicted=float(predicted_close),
+        ))
+    return len(dates)
+
+
+def get_backtest(session: Session, symbol: str, lens: str) -> list[BacktestPrediction]:
+    """One lens's backtest replay for an asset, oldest day first."""
+    return list(session.scalars(
+        select(BacktestPrediction)
+        .where(BacktestPrediction.symbol == symbol, BacktestPrediction.lens == lens)
+        .order_by(BacktestPrediction.date)
     ).all())
 
 

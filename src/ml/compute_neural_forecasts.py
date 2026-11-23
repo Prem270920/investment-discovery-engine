@@ -4,6 +4,7 @@ Compute and store GRU forecasts for every asset, scored head to head with ARIMA.
 Runs as pipeline stage 5b, straight after the ARIMA stage and inside the same
 transaction. For each asset that has an ARIMA forecast summary it:
   * trains the seeded GRU and stores its 30 day path under lens "gru",
+  * stores what it predicted for the 30 held out days, for the replay,
   * records gru_rmse_pct and gru_status on forecast_meta,
   * sets head_to_head_winner by comparing the GRU backtest error with ARIMA's.
 
@@ -21,11 +22,11 @@ import time
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.ml.compute_forecasts import _future_trading_dates, _load_close_series
+from src.ml.compute_forecasts import _future_trading_dates, _load_close_series, held_out_dates
 from src.ml.neural_forecast import forecast_asset_gru
 from src.ml.optional_deps import DISABLE_TORCH_ENV, torch_available
 from src.storage.models import ARIMA_LENS, GRU_LENS, GRU_NOT_RUN, ForecastMeta
-from src.storage.repository import replace_forecast, update_gru_meta
+from src.storage.repository import replace_backtest, replace_forecast, update_gru_meta
 
 logger = logging.getLogger("compute_neural_forecasts")
 
@@ -48,9 +49,10 @@ def _metas_with_arima(session: Session) -> list[ForecastMeta]:
 
 
 def _clear_gru_path(session: Session, symbol: str) -> None:
-    # A failed or skipped asset must not keep an old GRU path next to a status
-    # saying there isn't one.
+    # A failed or skipped asset must not keep an old GRU path or replay next
+    # to a status saying there isn't one.
     replace_forecast(session, symbol, [], [], [], [], lens=GRU_LENS)
+    replace_backtest(session, symbol, GRU_LENS, [], [], [])
 
 
 def _forecast_one(session: Session, meta: ForecastMeta) -> str:
@@ -67,6 +69,10 @@ def _forecast_one(session: Session, meta: ForecastMeta) -> str:
     replace_forecast(
         session, meta.symbol, future_dates,
         gru_forecast["predicted"], gru_forecast["lower"], gru_forecast["upper"], lens=GRU_LENS,
+    )
+    replace_backtest(
+        session, meta.symbol, GRU_LENS, held_out_dates(closes),
+        gru_forecast["backtest_actual"], gru_forecast["backtest_predicted"],
     )
     winner = pick_winner(meta.backtest_error_pct, gru_forecast["backtest_error_pct"])
     update_gru_meta(

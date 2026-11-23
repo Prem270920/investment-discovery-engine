@@ -72,15 +72,16 @@ def _best_arima(series: pd.Series):
 
 def _backtest_price_model(prices: pd.Series):
     """Fit price-ARIMA on all but the last BACKTEST_DAYS, forecast that window,
-    return % error vs actual. None if it can't fit"""
+    and return (% error vs actual, the predicted prices). None if it can't fit.
+    The path comes back too so the backtest can be replayed later."""
     if len(prices) <= BACKTEST_DAYS + 20:
         return None
     train, test = prices[:-BACKTEST_DAYS], prices[-BACKTEST_DAYS:]
     model, _ = _best_arima(train)
     if model is None:
         return None
-    fc = model.forecast(steps=BACKTEST_DAYS)
-    return rmse_pct_of_price(test.values, np.asarray(fc))
+    predicted_path = np.asarray(model.forecast(steps=BACKTEST_DAYS))
+    return rmse_pct_of_price(test.values, predicted_path), predicted_path
 
 
 def _backtest_returns_model(prices: pd.Series):
@@ -100,7 +101,8 @@ def _backtest_returns_model(prices: pd.Series):
     for r in fc_returns:
         p = p * (1 + r)
         reconstructed.append(p)
-    return rmse_pct_of_price(test.values, np.array(reconstructed))
+    predicted_path = np.array(reconstructed)
+    return rmse_pct_of_price(test.values, predicted_path), predicted_path
 
 
 def forecast_asset(prices: pd.Series):
@@ -115,8 +117,10 @@ def forecast_asset(prices: pd.Series):
     prices = _ensure_forecastable_index(prices)
 
     # Backtest both methods on held-out data.
-    price_err = _backtest_price_model(prices)
-    returns_err = _backtest_returns_model(prices)
+    price_backtest = _backtest_price_model(prices)
+    returns_backtest = _backtest_returns_model(prices)
+    price_err = price_backtest[0] if price_backtest else None
+    returns_err = returns_backtest[0] if returns_backtest else None
 
     if price_err is None and returns_err is None:
         return None
@@ -129,6 +133,8 @@ def forecast_asset(prices: pd.Series):
     else:
         method = "returns" if returns_err <= price_err else "price"
     backtest_error = returns_err if method == "returns" else price_err
+    # The replay shows the winning method's path, the one the error describes.
+    backtest_path = (returns_backtest if method == "returns" else price_backtest)[1]
 
     # Refit the winning method on ALL data and forecast forward
     if method == "price":
@@ -183,6 +189,9 @@ def forecast_asset(prices: pd.Series):
         "predicted": [float(x) for x in predicted],
         "lower": [float(x) for x in lower],
         "upper": [float(x) for x in upper],
+        # The held out window behind backtest_error_pct, oldest day first.
+        "backtest_actual": [float(x) for x in prices.iloc[-BACKTEST_DAYS:]],
+        "backtest_predicted": [float(x) for x in backtest_path],
     }
 
 def _self_test():

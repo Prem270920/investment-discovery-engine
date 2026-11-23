@@ -3,7 +3,8 @@ Compute and store ARIMA forecasts for every asset.
 
 Reads price history from the database, runs the validated
 returns-vs-price ARIMA engine, and stores the winning forecast plus its measured
-backtest error.
+backtest error, and the 30 held out days that error was measured on so the
+backtest can be replayed.
 
 
 COST WARNING: each asset runs 3 AIC grid searches (price backtest, returns
@@ -18,8 +19,9 @@ import pandas as pd
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from src.ml.forecasting import forecast_asset
-from src.storage.models import Asset, Forecast, ForecastMeta, Price
+from src.ml.forecasting import BACKTEST_DAYS, forecast_asset
+from src.storage.models import ARIMA_LENS, Asset, Forecast, ForecastMeta, Price
+from src.storage.repository import replace_backtest
 
 logger = logging.getLogger("compute_forecasts")
 
@@ -33,6 +35,15 @@ def _load_close_series(session: Session, symbol: str):
     if not rows:
         return pd.Series(dtype="float64")
     return pd.Series([r[1] for r in rows], index=pd.to_datetime([r[0] for r in rows]))
+
+
+def held_out_dates(closes: pd.Series) -> list:
+    """The real trading days a backtest predicted, oldest first.
+
+    Taken after dropping missing closes, exactly as both engines do, so day i
+    here is day i of the predicted path.
+    """
+    return [stamp.date() for stamp in closes.dropna().index[-BACKTEST_DAYS:]]
 
 
 def _future_trading_dates(last_date, n: int) -> list:
@@ -94,6 +105,11 @@ def compute_and_store_forecasts(session: Session) -> tuple[int, int]:
                 lower=result["lower"][i],
                 upper=result["upper"][i],
             ))
+
+        replace_backtest(
+            session, asset.symbol, ARIMA_LENS, held_out_dates(closes),
+            result["backtest_actual"], result["backtest_predicted"],
+        )
 
         meta = session.get(ForecastMeta, asset.symbol)
         if meta is None:

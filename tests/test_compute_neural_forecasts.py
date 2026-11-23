@@ -17,7 +17,9 @@ from src.ml import compute_neural_forecasts as stage
 from src.ml.forecasting import HORIZON_DAYS
 from src.storage.database import Base
 from src.storage.models import ARIMA_LENS, GRU_LENS, GRU_NOT_RUN, Asset, Forecast, Price
-from src.storage.repository import get_forecast_meta, replace_forecast, upsert_arima_meta
+from src.storage.repository import (
+    get_backtest, get_forecast_meta, replace_backtest, replace_forecast, upsert_arima_meta,
+)
 
 ARIMA_ERRORS = {"AAA": 2.0, "BBB": 1.0, "CCC": 1.5}
 FIRST_PRICE_DAY = date(2025, 1, 1)
@@ -57,6 +59,9 @@ def _gru_result(error_pct):
         "upper": [210.0] * HORIZON_DAYS,
         "backtest_best_epoch": 5,
         "forward_best_epoch": 6,
+        # The fixture's last 30 closes are 170 to 199.
+        "backtest_actual": [170.0 + offset for offset in range(30)],
+        "backtest_predicted": [171.0 + offset for offset in range(30)],
     }
 
 
@@ -108,17 +113,29 @@ def test_stage_stores_gru_rows_status_and_winner(session, stub_gru):
     assert _gru_row_count(session, "BBB") == HORIZON_DAYS
 
 
+def test_stage_stores_the_gru_replay_on_the_last_30_price_days(session, stub_gru):
+    stage.compute_and_store_neural_forecasts(session)
+    replay = get_backtest(session, "AAA", GRU_LENS)
+    # 100 daily prices from FIRST_PRICE_DAY, so the last 30 start at day 70.
+    assert [day.date for day in replay] == [FIRST_PRICE_DAY + timedelta(days=70 + offset) for offset in range(30)]
+    assert [day.actual for day in replay] == [170.0 + offset for offset in range(30)]
+    assert [day.predicted for day in replay] == [171.0 + offset for offset in range(30)]
+
+
 def test_one_failing_asset_is_marked_failed_and_others_continue(session, stub_gru):
     replace_forecast(session, "CCC", [date(2025, 6, 2)], [1.0], [0.5], [1.5], lens=GRU_LENS)
+    replace_backtest(session, "CCC", GRU_LENS, [date(2025, 3, 1)], [1.0], [1.0])
     stage.compute_and_store_neural_forecasts(session)
 
     failed_meta = get_forecast_meta(session, "CCC")
     assert (failed_meta.gru_status, failed_meta.gru_rmse_pct, failed_meta.head_to_head_winner) == ("failed", None, None)
-    # The stale path from an earlier run is gone, not left beside "failed".
+    # The stale path and replay from an earlier run are gone, not left beside "failed".
     assert _gru_row_count(session, "CCC") == 0
+    assert get_backtest(session, "CCC", GRU_LENS) == []
 
 
 def test_without_torch_every_asset_is_skipped_with_one_warning(session, monkeypatch, caplog):
+    replace_backtest(session, "AAA", GRU_LENS, [date(2025, 3, 1)], [1.0], [1.0])
     monkeypatch.setattr(stage, "torch_available", lambda: False)
     monkeypatch.setattr(stage, "forecast_asset_gru", lambda closes: pytest.fail("GRU must not run"))
 
@@ -130,6 +147,7 @@ def test_without_torch_every_asset_is_skipped_with_one_warning(session, monkeypa
     for symbol in ARIMA_ERRORS:
         meta = get_forecast_meta(session, symbol)
         assert (meta.gru_status, meta.head_to_head_winner) == ("skipped_no_torch", None)
+    assert get_backtest(session, "AAA", GRU_LENS) == []
 
 
 def test_reset_marks_everything_not_run(session, stub_gru):
@@ -138,4 +156,5 @@ def test_reset_marks_everything_not_run(session, stub_gru):
     for symbol in ARIMA_ERRORS:
         meta = get_forecast_meta(session, symbol)
         assert (meta.gru_status, meta.gru_rmse_pct, meta.head_to_head_winner) == (GRU_NOT_RUN, None, None)
+        assert get_backtest(session, symbol, GRU_LENS) == []
         assert _gru_row_count(session, symbol) == 0

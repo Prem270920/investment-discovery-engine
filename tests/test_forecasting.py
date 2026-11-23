@@ -1,6 +1,7 @@
 """
-One test, guarding the property the forecasting feature ethically depends on:
-the confidence band must widen with the horizon.
+Guards the property the forecasting feature ethically depends on: the
+confidence band must widen with the horizon. Also checks that the stored
+backtest replay is the very data its error was scored on.
 
 A projection whose uncertainty stays flat tells a beginner that a 30-day
 forecast is as reliable as a 1-day one. That's the opposite of what this
@@ -15,7 +16,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.ml.forecasting import forecast_asset
+from src.ml.forecast_metrics import rmse_pct_of_price
+from src.ml.forecasting import BACKTEST_DAYS, forecast_asset
 
 
 @pytest.mark.slow
@@ -50,3 +52,20 @@ def test_short_series_returns_none_rather_than_guessing():
     )
 
     assert forecast_asset(prices) is None
+
+
+@pytest.mark.slow
+def test_backtest_replay_reproduces_the_backtest_error():
+    rng = np.random.default_rng(7)
+    n = 250
+    prices = pd.Series(
+        np.maximum(np.linspace(100, 120, n) + rng.normal(0, 1.5, n).cumsum() * 0.3, 1.0),
+        index=pd.date_range("2025-01-01", periods=n, freq="B"),
+    )
+
+    forecast = forecast_asset(prices)
+
+    assert forecast["backtest_actual"] == [float(close) for close in prices.iloc[-BACKTEST_DAYS:]]
+    assert len(forecast["backtest_predicted"]) == BACKTEST_DAYS
+    replayed_error = rmse_pct_of_price(forecast["backtest_actual"], forecast["backtest_predicted"])
+    assert round(replayed_error, 2) == forecast["backtest_error_pct"]

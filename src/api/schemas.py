@@ -158,11 +158,26 @@ class HeadToHead(BaseModel):
     holdout_days: int
 
 
+class BacktestReplay(BaseModel):
+    """The held out days both models were scored on, ready to replay.
+
+    Parallel arrays, one entry per day, oldest first. Each lens's array is the
+    exact path its rmse_pct was computed from, against actual.
+    """
+    dates: list[date]
+    actual: list[float]
+    arima: list[float]
+    # Null whenever lenses.gru is null, so the replay and the forward chart
+    # never disagree about whether there is a GRU to show.
+    gru: list[float] | None = None
+
+
 class ForecastResponse(BaseModel):
     """A stored ARIMA projection with its measured accuracy.
 
     The top level fields are the original ARIMA contract and stay as they
-    were; lenses and head_to_head were added alongside for the GRU comparison.
+    were; lenses, head_to_head and backtest were added alongside for the GRU
+    comparison.
     """
     symbol: str
     method: str                    
@@ -172,6 +187,8 @@ class ForecastResponse(BaseModel):
     points: list[ForecastPoint]
     lenses: ForecastLenses
     head_to_head: HeadToHead
+    # Null only for an asset whose forecast was stored before replays were.
+    backtest: BacktestReplay | None = None
 
 class JargonTerm(BaseModel):
     """One glossed term from an asset's description."""

@@ -178,14 +178,16 @@ def _clean_closes(prices) -> np.ndarray:
 
 
 def _backtest(torch, closes: np.ndarray):
-    """Train without the last BACKTEST_DAYS bars, forecast them, score like ARIMA."""
+    """Train without the last BACKTEST_DAYS bars, forecast them, score like ARIMA.
+
+    Returns (error, best epoch, predicted prices), the path kept for replay."""
     windows = build_sequence_windows([closes])
     model, best_epoch = _train(torch, windows)
     scaled_path = _roll_forward(torch, model, windows.holdout_seeds[0], BACKTEST_DAYS)
     rebuilt_prices = _compound_returns(
         float(closes[-BACKTEST_DAYS - 1]), windows.scaler.unscale(scaled_path)
     )
-    return rmse_pct_of_price(closes[-BACKTEST_DAYS:], rebuilt_prices), best_epoch
+    return rmse_pct_of_price(closes[-BACKTEST_DAYS:], rebuilt_prices), best_epoch, rebuilt_prices
 
 
 def backtest_rmse_pct(prices) -> float | None:
@@ -194,7 +196,7 @@ def backtest_rmse_pct(prices) -> float | None:
     closes = _clean_closes(prices)
     if len(closes) < min_prices_for(BACKTEST_DAYS):
         return None
-    backtest_error, _ = _backtest(torch, closes)
+    backtest_error, _, _ = _backtest(torch, closes)
     return backtest_error
 
 
@@ -209,7 +211,7 @@ def forecast_asset_gru(prices):
     if len(closes) < min_prices_for(BACKTEST_DAYS):
         return None
 
-    backtest_error, backtest_epoch = _backtest(torch, closes)
+    backtest_error, backtest_epoch, backtest_path = _backtest(torch, closes)
 
     # Forward model: same seed, every bar available, validation slice still
     # held back for early stopping and for sizing the band.
@@ -235,4 +237,7 @@ def forecast_asset_gru(prices):
         "upper": [float(x) for x in upper],
         "backtest_best_epoch": backtest_epoch,
         "forward_best_epoch": forward_epoch,
+        # The held out window behind backtest_error_pct, oldest day first.
+        "backtest_actual": [float(x) for x in closes[-BACKTEST_DAYS:]],
+        "backtest_predicted": [float(x) for x in backtest_path],
     }

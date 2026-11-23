@@ -112,3 +112,13 @@ def test_band_widens_with_horizon(gru_forecast):
 def test_prediction_sits_inside_its_band(gru_forecast):
     for low, mid, high in zip(gru_forecast["lower"], gru_forecast["predicted"], gru_forecast["upper"]):
         assert low < mid < high
+
+
+@pytest.mark.slow
+def test_backtest_replay_reproduces_the_backtest_error(gru_forecast):
+    from src.ml.forecast_metrics import rmse_pct_of_price
+
+    assert gru_forecast["backtest_actual"] == [float(close) for close in _trending_prices()[-30:]]
+    assert len(gru_forecast["backtest_predicted"]) == 30
+    replayed_error = rmse_pct_of_price(gru_forecast["backtest_actual"], gru_forecast["backtest_predicted"])
+    assert round(replayed_error, 2) == gru_forecast["backtest_error_pct"]

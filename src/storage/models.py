@@ -159,7 +159,38 @@ class ForecastMeta(Base):
     )
 
     asset: Mapped["Asset"] = relationship()
-    
+
+
+class BacktestPrediction(Base):
+    """What one model predicted for one held out day, next to what happened.
+
+    The rows for a lens are the exact pair of series its backtest error was
+    scored on, so replaying them reproduces that error. The real close is
+    copied in rather than joined from prices because yfinance revises adjusted
+    closes between fetches, and a replay must match the error it explains.
+
+    Kept apart from forecasts: those are future days with a band, these are
+    past days with an actual and no band.
+    """
+    __tablename__ = "backtest_predictions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(
+        String, ForeignKey("assets.symbol"), nullable=False, index=True
+    )
+    lens: Mapped[str] = mapped_column(String, nullable=False)
+    date: Mapped["Date"] = mapped_column(Date, nullable=False)
+    actual: Mapped[float] = mapped_column(Float, nullable=False)
+    predicted: Mapped[float] = mapped_column(Float, nullable=False)
+
+    asset: Mapped["Asset"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("symbol", "lens", "date", name="uq_backtest_symbol_lens_date"),
+        CheckConstraint(f"lens IN ('{ARIMA_LENS}', '{GRU_LENS}')", name="ck_backtest_lens"),
+    )
+
+
 class AssetDescription(Base):
     """A beginner-friendly description for one asset, derived from source text"""
     __tablename__ = "asset_descriptions"

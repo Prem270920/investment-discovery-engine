@@ -18,12 +18,15 @@ from src.storage.models import (
     GRU_LENS,
     GRU_NOT_RUN,
     Asset,
+    BacktestPrediction,
     Forecast,
     ForecastMeta,
 )
 from src.storage.repository import (
+    get_backtest,
     get_forecast_meta,
     get_forecast_points,
+    replace_backtest,
     replace_forecast,
     update_gru_meta,
     upsert_arima_meta,
@@ -163,3 +166,60 @@ def test_arima_rerun_keeps_gru_summary_intact(session):
 def test_gru_update_without_arima_summary_is_skipped(session):
     assert update_gru_meta(session, SYMBOL, "skipped_no_torch") is False
     assert get_forecast_meta(session, SYMBOL) is None
+
+
+def _replay(days, start_price, offset_from_actual):
+    dates = [FIRST_DAY + timedelta(days=offset) for offset in range(days)]
+    actual = [start_price + offset for offset in range(days)]
+    return dates, actual, [close + offset_from_actual for close in actual]
+
+
+def test_backtest_replays_for_both_lenses_live_side_by_side(session):
+    replace_backtest(session, SYMBOL, ARIMA_LENS, *_replay(30, 100.0, 1.0))
+    replace_backtest(session, SYMBOL, GRU_LENS, *_replay(30, 100.0, -1.0))
+    session.flush()
+    assert session.query(BacktestPrediction).count() == 60
+    arima_days = get_backtest(session, SYMBOL, ARIMA_LENS)
+    assert [day.predicted - day.actual for day in arima_days] == [1.0] * 30
+
+
+def test_rerunning_one_lens_replaces_only_its_own_replay(session):
+    replace_backtest(session, SYMBOL, ARIMA_LENS, *_replay(30, 100.0, 1.0))
+    replace_backtest(session, SYMBOL, GRU_LENS, *_replay(30, 100.0, -1.0))
+    replace_backtest(session, SYMBOL, ARIMA_LENS, *_replay(30, 100.0, 2.0))
+    session.flush()
+    assert {day.predicted - day.actual for day in get_backtest(session, SYMBOL, ARIMA_LENS)} == {2.0}
+    assert {day.predicted - day.actual for day in get_backtest(session, SYMBOL, GRU_LENS)} == {-1.0}
+
+
+def test_empty_lists_clear_a_lens_replay(session):
+    replace_backtest(session, SYMBOL, GRU_LENS, *_replay(30, 100.0, -1.0))
+    assert replace_backtest(session, SYMBOL, GRU_LENS, [], [], []) == 0
+    session.flush()
+    assert get_backtest(session, SYMBOL, GRU_LENS) == []
+
+
+def test_backtest_days_come_back_in_date_order(session):
+    dates, actual, predicted = _replay(5, 100.0, 1.0)
+    replace_backtest(session, SYMBOL, ARIMA_LENS, dates[::-1], actual[::-1], predicted[::-1])
+    session.flush()
+    assert [day.date for day in get_backtest(session, SYMBOL, ARIMA_LENS)] == dates
+
+
+def test_mismatched_backtest_columns_are_refused(session):
+    dates, actual, predicted = _replay(3, 100.0, 1.0)
+    with pytest.raises(ValueError):
+        replace_backtest(session, SYMBOL, ARIMA_LENS, dates, actual, predicted[:2])
+
+
+def test_unknown_backtest_lens_is_rejected(session):
+    session.add(BacktestPrediction(symbol=SYMBOL, lens="lstm", date=FIRST_DAY, actual=1.0, predicted=1.0))
+    with pytest.raises(IntegrityError):
+        session.flush()
+
+
+def test_duplicate_backtest_day_within_a_lens_is_rejected(session):
+    for _ in range(2):
+        session.add(BacktestPrediction(symbol=SYMBOL, lens=ARIMA_LENS, date=FIRST_DAY, actual=1.0, predicted=1.0))
+    with pytest.raises(IntegrityError):
+        session.flush()

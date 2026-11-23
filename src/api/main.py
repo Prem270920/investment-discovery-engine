@@ -21,6 +21,7 @@ from src.api.schemas import (
     AssetDescriptionResponse,
     AssetDetail,
     AssetSummary,
+    BacktestReplay,
     BenchmarkPriceHistory,
     Capabilities,
     Carousel,
@@ -39,7 +40,8 @@ from src.api.schemas import (
     PricePoint,
 )
 from src.storage.models import (
-    ARIMA_LENS, GRU_LENS, Asset, AssetDescription, AssetMetric, Forecast, ForecastMeta, Price,
+    ARIMA_LENS, GRU_LENS, Asset, AssetDescription, AssetMetric, BacktestPrediction, Forecast,
+    ForecastMeta, Price,
 )
 from src.storage.database import SessionLocal
 
@@ -539,6 +541,38 @@ def get_forecast(symbol: str, db: Session = Depends(get_db)) -> ForecastResponse
         points=[ForecastPoint.model_validate(row) for row in arima_rows],
         lenses=ForecastLenses(arima=arima_lens, gru=gru_lens),
         head_to_head=_head_to_head(meta, gru_lens),
+        backtest=_backtest_replay(db, asset.symbol, gru_lens),
+    )
+
+
+def _backtest_rows(db: Session, symbol: str, lens: str) -> list[BacktestPrediction]:
+    return list(db.scalars(
+        select(BacktestPrediction)
+        .where(BacktestPrediction.symbol == symbol, BacktestPrediction.lens == lens)
+        .order_by(BacktestPrediction.date)
+    ).all())
+
+
+def _backtest_replay(db: Session, symbol: str, gru_lens: ForecastLens | None) -> BacktestReplay | None:
+    arima_days = _backtest_rows(db, symbol, ARIMA_LENS)
+    if not arima_days:
+        return None
+    held_out_dates = [day.date for day in arima_days]
+
+    # GRU joins the replay only when its forward lens is served, and only if
+    # it was scored on the very same days; anything else would race two
+    # models over different ground.
+    gru_path = None
+    if gru_lens is not None:
+        gru_days = _backtest_rows(db, symbol, GRU_LENS)
+        if [day.date for day in gru_days] == held_out_dates:
+            gru_path = [day.predicted for day in gru_days]
+
+    return BacktestReplay(
+        dates=held_out_dates,
+        actual=[day.actual for day in arima_days],
+        arima=[day.predicted for day in arima_days],
+        gru=gru_path,
     )
 
 
