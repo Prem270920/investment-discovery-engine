@@ -44,6 +44,12 @@
   --risk-temp-4: #D9A07F;
   --risk-temp-5: #D97F74;  /* Volatile */
 
+  /* Data lines: price histories, sparklines and projections. A pale neutral,
+     neither a risk colour nor the brand teal, because colour on this site
+     only ever means risk (Phase R rule 7). Direction is carried by the + or
+     minus sign, never by colour. 11.5:1 on navy. */
+  --data-line: #C3CDD8;
+
   /* Type families */
   --font-display: 'Fraunces', Georgia, serif;
   --font-body:    'Inter', system-ui, sans-serif;

@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getAsset, getPrices, getForecast, getDescription, getRelated } from "../api";
-import { riskStyle } from "../risk";
+import { useCurrentSection } from "../hooks/useCurrentSection";
+import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useInView } from "../hooks/useInView";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import PriceChart from "./PriceChart";
+import RiskChip from "./RiskChip";
 import styles from "./KnowledgeCard.module.css";
 
 /** Plain-language explainer assembled from OUR OWN data. This is the FALLBACK used
@@ -48,12 +52,46 @@ function explain(asset) {
   return parts;
 }
 
+// The four parts of the story, in reading order.
+const STORY_SECTIONS = [
+  { id: "about", label: "What is it" },
+  { id: "moves", label: "How it moves" },
+  { id: "outlook", label: "What might happen" },
+  { id: "similar", label: "Similar assets" },
+];
+const SECTION_IDS = STORY_SECTIONS.map((section) => section.id);
+
+// The projection view shows about three months of history before the
+// forecast, so the 30 projected days aren't squeezed against a full year.
+const PROJECTION_CONTEXT_DAYS = 63;
+
+export const NOT_AVAILABLE = "Not available";
+
+// One line of plain explanation under each metric.
+const METRIC_NOTES = {
+  volatility: "How much the price swings in a typical year. Higher means a bumpier ride.",
+  sharpe: "Return earned for each unit of risk. Negative means the asset lost money over the period.",
+  beta: "How strongly it moves with its benchmark. 1 moves in step, below 1 moves less.",
+  dividend: "Yearly income paid out, as a share of the price.",
+  pe: "Price divided by a year of earnings per share. Funds usually don't report one.",
+  close: "The most recent closing price we have stored.",
+};
+
 // What the card holds before an asset has loaded: the loading state.
 const EMPTY_CARD = {
   symbol: null, asset: null, prices: null, forecast: null,
   description: null, related: [], error: null,
 };
 
+/**
+ * A full height panel that tells one asset's story in four parts: what it
+ * is, how it moves, what might happen, and similar assets. A sticky index
+ * shows where you are and jumps between parts. Sections fade up once as they
+ * arrive; scrolling stays ordinary.
+ *
+ * While open, focus stays inside; Escape or the close button closes it, and
+ * focus goes back to whatever opened it.
+ */
 export default function KnowledgeCard({ symbol, onClose }) {
   // The card controls its own active symbol, seeded from the prop, so clicking
   // a related asset navigates WITHIN the card (the Netflix browsing loop)
@@ -77,6 +115,14 @@ export default function KnowledgeCard({ symbol, onClose }) {
   const shownCard = loadedCard.symbol === activeSymbol ? loadedCard : EMPTY_CARD;
   const { asset, prices, forecast, description, related, error } = shownCard;
 
+  const panelRef = useRef(null);
+  const reducedMotion = useReducedMotion();
+  useFocusTrap(panelRef);
+  const [currentSection, jumpTo] = useCurrentSection(panelRef, SECTION_IDS, {
+    contentKey: asset ? asset.symbol : null,
+    reducedMotion,
+  });
+
   useEffect(() => {
     let live = true;
     Promise.all([
@@ -98,79 +144,84 @@ export default function KnowledgeCard({ symbol, onClose }) {
     return () => { live = false; };
   }, [activeSymbol]);
 
+  // On a phone the four labels are wider than the bar, so the index scrolls
+  // sideways. Slide it so the highlighted entry is never hidden off the edge.
+  // Moving the nav's own scrollLeft avoids scrollIntoView nudging the panel.
+  const indexRef = useRef(null);
+  useLayoutEffect(() => {
+    const indexNav = indexRef.current;
+    const currentButton = indexNav?.querySelector("[aria-current]");
+    if (!indexNav || !currentButton) return;
+    const navBox = indexNav.getBoundingClientRect();
+    const buttonBox = currentButton.getBoundingClientRect();
+    if (buttonBox.right > navBox.right) indexNav.scrollLeft += buttonBox.right - navBox.right;
+    else if (buttonBox.left < navBox.left) indexNav.scrollLeft -= navBox.left - buttonBox.left;
+  }, [currentSection]);
+
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const tier = asset ? riskStyle(asset.risk_tier) : null;
+  // A related chip swaps the whole story, so start the new one from the top
+  // and keep focus in the panel (the chip that had it is gone).
+  const openRelated = (relatedSymbol) => {
+    setActiveSymbol(relatedSymbol);
+    const panel = panelRef.current;
+    if (panel) {
+      panel.scrollTo({ top: 0 });
+      panel.focus({ preventScroll: true });
+    }
+  };
+
+  const projectionHistory = prices ? prices.slice(-PROJECTION_CONTEXT_DAYS) : null;
 
   return (
     <div className={styles.overlay} onClick={onClose}>
-      <article className={styles.panel} onClick={(e) => e.stopPropagation()}
-               role="dialog" aria-modal="true" aria-label={`${activeSymbol} details`}>
-        <button className={styles.close} onClick={onClose} aria-label="Close">✕</button>
+      <article
+        ref={panelRef}
+        className={styles.panel}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${activeSymbol} details`}
+        tabIndex={-1}
+      >
+        <div className={styles.bar} data-section-index>
+          <nav ref={indexRef} className={styles.index} aria-label="Sections of this card">
+            {STORY_SECTIONS.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                className={`${styles.indexItem} ${currentSection === section.id ? styles.indexCurrent : ""}`}
+                aria-current={currentSection === section.id ? "true" : undefined}
+                onClick={() => jumpTo(section.id)}
+                disabled={!asset}
+              >
+                {section.label}
+              </button>
+            ))}
+          </nav>
+          <button className={styles.close} onClick={onClose} aria-label="Close">✕</button>
+        </div>
 
         {error && <p className={styles.error}>{error}</p>}
         {!asset && !error && <p className={styles.loading}>Loading {activeSymbol}…</p>}
 
         {asset && (
           <>
-            <header className={styles.head}>
-              <div>
+            <StorySection id="about" label="What is it">
+              <header className={styles.head}>
                 <h2 className={styles.symbol}>{asset.symbol}</h2>
                 <p className={styles.name}>{asset.short_name}</p>
-              </div>
-              <div className={styles.badges}>
-                <span className={styles.pill} style={{ borderColor: tier.color, color: tier.color }}>
-                  {tier.label}
-                </span>
-                <span className={styles.pillMuted}>{asset.quote_type}</span>
-              </div>
-            </header>
+                <div className={styles.badges}>
+                  <RiskChip riskTier={asset.risk_tier} />
+                  <span className={styles.pillMuted}>{asset.quote_type}</span>
+                </div>
+              </header>
 
-            <PriceChart points={prices} forecast={forecast} currency={asset.currency} />
-
-            {forecast && (
-              <section className={styles.forecastNote}>
-                <h3 className={styles.explainerTitle}>The dashed projection</h3>
-                <p className={styles.para}>
-                  The dashed line projects {forecast.horizon_days} trading days ahead
-                  using an ARIMA model{" "}
-                  {forecast.method === "returns"
-                    ? "fitted to daily returns"
-                    : "fitted to prices directly"}
-                  . The shaded band shows the range of plausible outcomes. Notice it
-                  gets wider the further out it goes, because uncertainty compounds.
-                </p>
-                {forecast.backtest_error_pct != null && (
-                  <p className={styles.para}>
-                    <strong>How much should you trust it?</strong> Tested on the most
-                    recent 30 days it had never seen, this model's projections were off
-                    by about{" "}
-                    <span className="tnum" style={{ color: "var(--ink)", fontWeight: 600 }}>
-                      {forecast.backtest_error_pct}%
-                    </span>
-                    {" "}on average. Treat it as an illustration of a statistical trend,
-                    not a prediction of what will happen.
-                  </p>
-                )}
-              </section>
-            )}
-
-            <div className={styles.metrics}>
-              <Metric label="Volatility (1y)" value={asset.annualized_volatility != null ? `${(asset.annualized_volatility * 100).toFixed(1)}%` : "n/a"} />
-              <Metric label="Sharpe ratio" value={asset.sharpe_ratio?.toFixed(2) ?? "n/a"} />
-              <Metric label={`Beta vs ${asset.benchmark_symbol ?? "benchmark"}`} value={asset.beta?.toFixed(2) ?? "n/a"} />
-              <Metric label="Dividend yield" value={asset.dividend_yield != null ? `${asset.dividend_yield.toFixed(2)}%` : "n/a"} />
-              <Metric label="P/E ratio" value={asset.trailing_pe?.toFixed(1) ?? "n/a"} />
-              <Metric label="Latest close" value={`${asset.currency} ${asset.latest_close.toFixed(2)}`} />
-            </div>
-
-            <section className={styles.explainer}>
               <h3 className={styles.explainerTitle}>What is this?</h3>
-
               {description ? (
                 <>
                   <p className={styles.para}>{description.summary}</p>
@@ -181,33 +232,94 @@ export default function KnowledgeCard({ symbol, onClose }) {
               ) : (
                 explain(asset).map((p, i) => <p key={i} className={styles.para}>{p}</p>)
               )}
+            </StorySection>
 
-              <p className={styles.disclaimer}>
-                Educational information only. Not financial advice.
-              </p>
-            </section>
+            <StorySection id="moves" label="How it moves">
+              <PriceChart points={prices} currency={asset.currency} changeLabel="1 year" />
 
-            {related.length > 0 && (
-              <section className={styles.related}>
-                <h3 className={styles.explainerTitle}>You might also like</h3>
-                <p className={styles.relatedHint}>
-                  Similar {asset.quote_type === "ETF" ? "funds" : "companies"}, ranked by how alike they behave.
-                </p>
-                <div className={styles.relatedRow}>
-                  {related.map((r) => {
-                    const rt = riskStyle(r.risk_tier);
-                    return (
+              <dl className={styles.metrics}>
+                <Metric label="Volatility (1y)" note={METRIC_NOTES.volatility}
+                        value={asset.annualized_volatility != null ? `${(asset.annualized_volatility * 100).toFixed(1)}%` : null} />
+                <Metric label="Sharpe ratio" note={METRIC_NOTES.sharpe}
+                        value={asset.sharpe_ratio?.toFixed(2)} />
+                <Metric label={`Beta vs ${asset.benchmark_symbol ?? "benchmark"}`} note={METRIC_NOTES.beta}
+                        value={asset.beta?.toFixed(2)} />
+                <Metric label="Dividend yield" note={METRIC_NOTES.dividend}
+                        value={asset.dividend_yield != null ? `${asset.dividend_yield.toFixed(2)}%` : null} />
+                <Metric label="P/E ratio" note={METRIC_NOTES.pe}
+                        value={asset.trailing_pe?.toFixed(1)} />
+                <Metric label="Latest close" note={METRIC_NOTES.close}
+                        value={`${asset.currency} ${asset.latest_close.toFixed(2)}`} />
+              </dl>
+            </StorySection>
+
+            <StorySection id="outlook" label="What might happen">
+              {forecast ? (
+                <>
+                  <PriceChart
+                    points={projectionHistory}
+                    forecast={forecast}
+                    currency={asset.currency}
+                    changeLabel={null}
+                    description={`Projection chart: the last three months of prices and the next ${forecast.horizon_days} trading days, with a shaded range of plausible outcomes`}
+                  />
+                  <div className={styles.forecastNote}>
+                    <h3 className={styles.explainerTitle}>The dashed projection</h3>
+                    <p className={styles.para}>
+                      The dashed line projects {forecast.horizon_days} trading days ahead
+                      using an ARIMA model{" "}
+                      {forecast.method === "returns"
+                        ? "fitted to daily returns"
+                        : "fitted to prices directly"}
+                      . The shaded band shows the range of plausible outcomes. Notice it
+                      gets wider the further out it goes, because uncertainty compounds.
+                    </p>
+                    {forecast.backtest_error_pct != null && (
+                      <p className={styles.para}>
+                        <strong>How much should you trust it?</strong> Tested on the most
+                        recent 30 days it had never seen, this model's projections were off
+                        by about{" "}
+                        <span className={`tnum ${styles.figure}`}>
+                          {forecast.backtest_error_pct}%
+                        </span>
+                        {" "}on average. Treat it as an illustration of a statistical trend,
+                        not a prediction of what will happen.
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className={styles.para}>No projection is available for this asset yet.</p>
+              )}
+            </StorySection>
+
+            <StorySection id="similar" label="Similar assets">
+              <h3 className={styles.explainerTitle}>You might also like</h3>
+              {related.length > 0 ? (
+                <>
+                  <p className={styles.relatedHint}>
+                    Similar {asset.quote_type === "ETF" ? "funds" : "companies"}, ranked by how alike they behave.
+                  </p>
+                  <div className={styles.relatedRow}>
+                    {related.map((r) => (
                       <button key={r.symbol} className={styles.relatedChip}
-                              onClick={() => setActiveSymbol(r.symbol)}>
-                        <span className={styles.relatedDot} style={{ background: rt.color }} aria-hidden="true" />
+                              onClick={() => openRelated(r.symbol)}
+                              aria-label={`${r.symbol}, ${r.short_name}. Open in this card.`}>
                         <span className={styles.relatedSymbol}>{r.symbol}</span>
                         <span className={styles.relatedName}>{r.short_name}</span>
+                        <RiskChip riskTier={r.risk_tier} className={styles.relatedRisk} />
                       </button>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className={styles.relatedHint}>No similar assets found.</p>
+              )}
+            </StorySection>
+
+            <p className={styles.disclaimer}>
+              Educational information only. Not financial advice.
+            </p>
           </>
         )}
       </article>
@@ -215,11 +327,29 @@ export default function KnowledgeCard({ symbol, onClose }) {
   );
 }
 
+/** One part of the story. Fades and rises in once, the first time it is seen. */
+function StorySection({ id, label, children }) {
+  const [sectionRef, inView] = useInView({ threshold: 0.15 });
+  const reducedMotion = useReducedMotion();
+  const headingId = `story-${id}`;
+  return (
+    <section
+      ref={sectionRef}
+      data-section={id}
+      aria-labelledby={headingId}
+      className={`${styles.section} ${inView || reducedMotion ? styles.revealed : ""}`}
+    >
+      <p className={styles.eyebrow} id={headingId}>{label}</p>
+      {children}
+    </section>
+  );
+}
+
 function JargonGlossary({ terms }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={styles.glossary}>
-      <button className={styles.glossaryToggle} onClick={() => setOpen(!open)}>
+      <button className={styles.glossaryToggle} onClick={() => setOpen(!open)} aria-expanded={open}>
         {open ? "Hide" : "Explain the terms used"} ({terms.length})
       </button>
       {open && (
@@ -236,11 +366,12 @@ function JargonGlossary({ terms }) {
   );
 }
 
-function Metric({ label, value }) {
+function Metric({ label, value, note }) {
   return (
     <div className={styles.metric}>
-      <span className={styles.metricLabel}>{label}</span>
-      <span className={`${styles.metricValue} tnum`}>{value}</span>
+      <dt className={styles.metricLabel}>{label}</dt>
+      <dd className={`${styles.metricValue} ${value == null ? styles.missing : ""} tnum`}>{value ?? NOT_AVAILABLE}</dd>
+      <dd className={styles.metricNote}>{note}</dd>
     </div>
   );
 }

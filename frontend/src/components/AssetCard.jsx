@@ -1,8 +1,8 @@
 import { useCallback, useId, useRef, useState } from "react";
-import { linePath, scalePoints } from "../benchmarkLine";
+import { formatChange, linePath, percentChange, scalePoints } from "../benchmarkLine";
 import { riskStyle } from "../risk";
-import { tierNumber } from "../riskSpread";
 import InfoTip from "./InfoTip";
+import RiskChip from "./RiskChip";
 import styles from "./AssetCard.module.css";
 
 export const SHARPE_EXPLAINER =
@@ -19,15 +19,15 @@ const SPARK_HEIGHT = 28;
  *
  * Pointing at the card (hover, keyboard focus, or its dot on the risk spread
  * strip) draws in a sparkline of the last 90 trading days and lifts the
- * Sharpe figure slightly. Every number is on the card at rest; the motion
- * only adds the trend.
+ * Sharpe figure slightly. Every number is on the card at rest, including the
+ * change over that window; the motion only adds the shape of the trend.
+ * The line is one neutral colour for every card: direction is in the sign.
  *
  * highlighted lights the card up when its dot on the strip is pointed at;
  * onHighlight reports the reverse, so the strip can light the dot.
  */
 export default function AssetCard({ asset, onSelect, highlighted = false, onHighlight = () => {} }) {
   const tier = riskStyle(asset.risk_tier);
-  const tierStep = tierNumber(asset.risk_tier);
   const sharpeTipId = useId();
   const infoRef = useRef(null);
   const cardRef = useRef(null);
@@ -44,8 +44,8 @@ export default function AssetCard({ asset, onSelect, highlighted = false, onHigh
 
   const closes = asset.sparkline_closes ?? [];
   const spark = closes.length >= 2 ? scalePoints(closes, SPARK_WIDTH, SPARK_HEIGHT, 0.1) : null;
-  // Same reading as the hero: cool for a rise over the window, warm for a fall.
-  const sparkRose = closes.length >= 2 && closes[closes.length - 1] >= closes[0];
+  // The API's window starts and ends on real closes, so this is the true change.
+  const windowChange = spark ? percentChange(closes[0], closes[closes.length - 1]) : null;
 
   // Keyboard focus also opens the Sharpe explainer, since the info mark
   // inside the card can't take focus itself (a button can't hold a button).
@@ -74,12 +74,7 @@ export default function AssetCard({ asset, onSelect, highlighted = false, onHigh
       aria-label={`${asset.symbol}, ${asset.short_name}, ${tier.label}. View details.`}
       aria-describedby={sharpeTipId}
     >
-      <span
-        className={styles.chip}
-        style={{ "--chip-color": tierStep ? `var(--risk-temp-${tierStep})` : "var(--ink-muted)" }}
-      >
-        {tier.label}
-      </span>
+      <RiskChip riskTier={asset.risk_tier} />
 
       <span className={styles.symbol}>{asset.symbol}</span>
       <span className={styles.name} onMouseEnter={offerFullName} data-testid="card-name">
@@ -95,14 +90,12 @@ export default function AssetCard({ asset, onSelect, highlighted = false, onHigh
         data-testid="card-sparkline"
       >
         {spark && (
-          <path
-            className={styles.sparkLine}
-            d={linePath(spark.coords)}
-            pathLength="1"
-            style={{ "--spark-color": sparkRose ? "var(--risk-temp-1)" : "var(--risk-temp-5)" }}
-          />
+          <path className={styles.sparkLine} d={linePath(spark.coords)} pathLength="1" />
         )}
       </svg>
+      <span className={`${styles.sparkChange} tnum`} data-testid="card-change">
+        {windowChange === null ? "No recent prices" : `${formatChange(windowChange)} in 90 trading days`}
+      </span>
 
       <span className={styles.metric}>
         <span className={styles.metricLabel}>

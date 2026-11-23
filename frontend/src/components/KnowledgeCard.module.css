@@ -4,22 +4,34 @@
   background: var(--overlay-scrim);
   backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 24px;
   z-index: 50;
 }
 
+/* A full height reading panel. It is the scroll container, so the section
+   index can stick to its top. */
 .panel {
   position: relative;
-  width: min(640px, 100%);
-  max-height: 88vh;
+  width: min(720px, 100%);
+  height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg-panel);
-  border: 1px solid var(--hairline);
-  border-radius: 14px;
-  padding: 28px;
+  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  padding: 0 28px 40px;
   animation: rise 180ms ease;
+
+  /* Dark native scrollbars, so no white strip shows down the right edge */
+  color-scheme: dark;
+  scrollbar-color: var(--hairline) transparent;
+  scrollbar-width: thin;
+}
+
+/* The panel only takes focus so the dialog is announced; it isn't a control */
+.panel:focus {
+  outline: none;
 }
 
 @keyframes rise {
@@ -27,26 +39,111 @@
   to   { transform: none; opacity: 1; }
 }
 
+/* ---- Sticky bar: section index and close button share it, so the close
+   button can never sit on top of the asset's chips ---- */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 -28px var(--space-2);
+  padding: var(--space-3) 28px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.index {
+  display: flex;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.indexItem {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
+}
+
+.indexItem:hover:not(:disabled) { color: var(--ink); }
+.indexItem:disabled { cursor: default; opacity: 0.5; }
+
+.indexCurrent {
+  color: var(--ink);
+  background: var(--bg-hover);
+  border-color: var(--hairline);
+}
+
+.indexItem:focus-visible,
+.close:focus-visible,
+.glossaryToggle:focus-visible,
+.relatedChip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
+  flex-shrink: 0;
   appearance: none;
   border: none;
   background: transparent;
   color: var(--ink-muted);
   font-size: 16px;
   cursor: pointer;
-  padding: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
 }
 .close:hover { color: var(--ink); }
 
+/* ---- Sections ---- */
+
+.section {
+  /* Lands below the sticky bar when jumped to */
+  scroll-margin-top: 64px;
+  padding: var(--space-5) 0 var(--space-6);
+  border-bottom: 1px solid var(--hairline);
+
+  /* Fades and rises once, the first time it scrolls into view */
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity var(--duration-reveal) var(--ease-out),
+    transform var(--duration-reveal) var(--ease-out);
+}
+
+.revealed {
+  opacity: 1;
+  transform: none;
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-3);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
 .head {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 18px;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
 }
 
 .symbol {
@@ -55,25 +152,25 @@
   margin: 0;
 }
 
-.name { color: var(--ink-muted); margin: 4px 0 0; font-size: 14px; }
+.name { color: var(--ink-muted); margin: 0; font-size: 14px; }
 
-.badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: var(--space-2); }
 
-.pill, .pillMuted {
+.pillMuted {
   font-size: 12px;
   font-weight: 500;
-  padding: 4px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--hairline);
   white-space: nowrap;
+  color: var(--ink-muted);
 }
-.pillMuted { color: var(--ink-muted); }
 
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  margin: 22px 0;
+  margin: 22px 0 0;
 }
 
 .metric {
@@ -87,7 +184,9 @@
 }
 
 .metricLabel { font-size: 11px; color: var(--ink-muted); }
-.metricValue { font-size: 16px; font-weight: 600; }
+.metricValue { margin: 0; font-size: 16px; font-weight: 600; }
+.missing { font-size: 14px; font-weight: 500; color: var(--ink-muted); }
+.metricNote { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-muted); }
 
 .explainerTitle {
   font-family: var(--font-display);
@@ -97,18 +196,22 @@
 
 .para { font-size: 14px; line-height: 1.6; color: var(--ink); margin: 0 0 10px; }
 
+.figure { color: var(--ink); font-weight: 600; }
+
 .disclaimer {
   font-size: 12px;
   color: var(--ink-muted);
-  border-top: 1px solid var(--hairline);
-  padding-top: 12px;
-  margin-top: 14px;
+  padding-top: 16px;
+  margin: 0;
 }
 
-.error { color: var(--risk-very-high); }
-.loading { color: var(--ink-muted); }
+/* Errors are plain ink: colour on this site only ever means risk */
+.error { color: var(--ink); padding-top: var(--space-4); }
+.loading { color: var(--ink-muted); padding-top: var(--space-4); }
 
 @media (max-width: 560px) {
+  .panel { padding: 0 16px 32px; border: none; }
+  .bar { margin: 0 -16px var(--space-2); padding: var(--space-2) 16px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -157,12 +260,6 @@
   line-height: 1.5;
 }
 
-.related {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--hairline);
-}
-
 .relatedHint {
   font-size: 13px;
   color: var(--ink-muted);
@@ -173,7 +270,8 @@
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding-bottom: 6px;
+  padding: 4px 4px 8px;
+  margin: 0 -4px;
   scrollbar-width: thin;
   scrollbar-color: var(--hairline) transparent;
 }
@@ -183,21 +281,21 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  min-width: 130px;
+  min-width: 150px;
   appearance: none;
   border: 1px solid var(--hairline);
   background: var(--bg-deep);
   border-radius: var(--radius);
   padding: 12px;
   cursor: pointer;
+  font-family: var(--font-body);
+  text-align: left;
   transition: transform 140ms ease, border-color 140ms ease;
 }
 .relatedChip:hover {
   transform: translateY(-3px);
   border-color: var(--accent);
 }
-
-.relatedDot { width: 8px; height: 8px; border-radius: 50%; }
 
 .relatedSymbol { font-size: 15px; font-weight: 600; color: var(--ink); }
 
@@ -207,5 +305,10 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 110px;
+  max-width: 126px;
+}
+
+.relatedRisk {
+  margin-top: 4px;
+  font-size: 11px;
 }

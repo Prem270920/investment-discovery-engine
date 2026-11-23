@@ -67,8 +67,8 @@
   color: var(--ink-muted);
 }
 
-.up { color: var(--risk-temp-1); }
-.down { color: var(--risk-temp-5); }
+/* Neutral on purpose: the + or minus sign carries the direction */
+.change { color: var(--ink); }
 
 .changeLabel {
   color: var(--ink-muted);
@@ -115,7 +115,7 @@
 
 .line {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--data-line);
   stroke-width: 2;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -140,7 +140,7 @@
   /* Centred on the point: half of 9px plus the 2px border */
   margin: -6.5px 0 0 -6.5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--data-line);
   border: 2px solid var(--bg-deep);
   box-sizing: content-box;
   pointer-events: none;

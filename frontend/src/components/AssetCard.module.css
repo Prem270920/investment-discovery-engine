@@ -33,22 +33,6 @@
   outline-offset: 2px;
 }
 
-/* Risk chip: the tier's plain label in its risk temperature colour */
-.chip {
-  align-self: flex-start;
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
-  /* A quarter ink lifts the text off its own tint: worst case is 5.09:1
-     (tier 5 on the hover background), where pure tier colour gave 4.02:1. */
-  color: color-mix(in srgb, var(--chip-color) 75%, var(--ink));
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
 .symbol {
   font-size: 20px;
   font-weight: 600;
@@ -72,7 +56,7 @@
 
 .sparkLine {
   fill: none;
-  stroke: var(--spark-color);
+  stroke: var(--data-line);
   stroke-width: 1.5;
   stroke-linejoin: round;
   stroke-linecap: round;
@@ -86,6 +70,14 @@
 .card:focus-visible .sparkLine,
 .highlighted .sparkLine {
   stroke-dashoffset: 0;
+}
+
+/* The window's change, always shown; the sign alone gives the direction */
+.sparkChange {
+  margin-top: -6px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  text-align: right;
 }
 
 .metric {

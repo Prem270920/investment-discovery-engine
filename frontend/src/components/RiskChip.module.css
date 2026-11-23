@@ -1,0 +1,14 @@
+.chip {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  /* A quarter ink lifts the text off its own tint: worst case is 5.09:1
+     (tier 5 on the hover background), where pure tier colour gave 4.02:1. */
+  color: color-mix(in srgb, var(--chip-color) 75%, var(--ink));
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}

@@ -16,7 +16,8 @@ const PAGE_STEP = 21;
 
 /**
  * The market backdrop above the carousels: a year of a benchmark index,
- * drawn from stored prices. Pointing along the line (or pressing the arrow
+ * drawn from stored prices in the neutral data colour (colour only ever
+ * means risk; the sign on the change gives the direction). Pointing along the line (or pressing the arrow
  * keys while it has focus) scrubs to that day's date and level. The latest
  * level, the year's change and its range are always shown as text.
  *
@@ -85,7 +86,7 @@ export default function BenchmarkHero({ symbol, note }) {
           <span className={`${styles.level} tnum`} data-testid="hero-level">{formatLevel(shownPoint.close)}</span>
           <span className={styles.readoutDetail}>
             <span className="tnum" data-testid="hero-date">{formatDate(shownPoint.date)}</span>
-            <span className={`tnum ${change >= 0 ? styles.up : styles.down}`}>
+            <span className={`tnum ${styles.change}`}>
               {formatChange(change)}
               <span className={styles.changeLabel}>{scrubbing ? " since the start" : " over the year"}</span>
             </span>
@@ -112,8 +113,8 @@ export default function BenchmarkHero({ symbol, note }) {
         <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--data-line)" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="var(--data-line)" stopOpacity="0" />
             </linearGradient>
           </defs>
           <path className={styles.area} d={areaPath(coords, CHART_HEIGHT)} fill={`url(#${gradientId})`} />

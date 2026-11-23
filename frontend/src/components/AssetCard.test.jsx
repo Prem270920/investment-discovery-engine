@@ -44,12 +44,28 @@ describe("sparkline", () => {
     expect(path.getAttribute("d").match(/[ML]/g)).toHaveLength(30);
   });
 
-  it("colours a rise cool and a fall warm", () => {
+  it("draws every line in the one neutral data colour, whichever way it went", () => {
+    const lineColour = () => screen.getByTestId("card-sparkline").querySelector("path").style.getPropertyValue("--spark-color");
     renderCard();
-    expect(screen.getByTestId("card-sparkline").querySelector("path").style.getPropertyValue("--spark-color")).toBe("var(--risk-temp-1)");
+    expect(lineColour()).toBe("");
     cleanup();
     renderCard({ sparkline_closes: FALLING });
-    expect(screen.getByTestId("card-sparkline").querySelector("path").style.getPropertyValue("--spark-color")).toBe("var(--risk-temp-5)");
+    expect(lineColour()).toBe("");
+  });
+
+  it("shows the change over the window as a signed number at rest, with no colour of its own", () => {
+    renderCard();
+    // 100 to 129 is a 29% rise.
+    expect(screen.getByTestId("card-change").textContent).toBe("+29.0% in 90 trading days");
+    expect(screen.getByTestId("card-change").style.color).toBe("");
+    cleanup();
+    renderCard({ sparkline_closes: FALLING });
+    expect(screen.getByTestId("card-change").textContent).toBe("\u221222.5% in 90 trading days");
+  });
+
+  it("says so plainly when there are no recent prices", () => {
+    renderCard({ sparkline_closes: null });
+    expect(screen.getByTestId("card-change").textContent).toBe("No recent prices");
   });
 
   it("keeps its space but draws nothing without at least two closes", () => {

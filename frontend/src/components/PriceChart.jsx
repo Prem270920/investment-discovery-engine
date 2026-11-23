@@ -1,15 +1,26 @@
 /**
  * Inline SVG price chart
  * The forecast is drawn DASHED with a shaded confidence band
+ *
+ * Everything is the neutral data colour: colour only ever means risk, so the
+ * direction of a change is carried by its + or minus sign alone.
  */
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { formatChange, percentChange } from "../benchmarkLine";
+import styles from "./PriceChart.module.css";
 
-export default function PriceChart({ points, forecast, currency }) {
+/**
+ * changeLabel names the period for the change line under the chart ("1 year");
+ * pass null to leave that line out, as the projection view does.
+ * description, if given, replaces the generated accessible label.
+ */
+export default function PriceChart({ points, forecast, currency, changeLabel = "1 year", description }) {
   const svgRef = useRef(null);
+  const fillId = useId();
   const [hover, setHover] = useState(null);   // index into the combined series
 
   if (!points || points.length < 2) {
-    return <p style={{ color: "var(--ink-muted)" }}>No price history available.</p>;
+    return <p className={styles.empty}>No price history available.</p>;
   }
 
   const fPoints = forecast?.points ?? [];
@@ -87,7 +98,11 @@ export default function PriceChart({ points, forecast, currency }) {
   const first = histCloses[0];
   const last = histCloses[histCloses.length - 1];
   const up = last >= first;
-  const changePct = ((last - first) / first) * 100;
+  const changePct = percentChange(first, last);
+
+  const generatedLabel =
+    `Price chart, ${Math.abs(changePct).toFixed(1)} percent ${up ? "up" : "down"} over one year` +
+    (fPoints.length ? ", with projection" : "");
 
   return (
     <div>
@@ -98,19 +113,19 @@ export default function PriceChart({ points, forecast, currency }) {
         role="img"
         onMouseMove={handleMove}
         onMouseLeave={() => setHover(null)}
-        style={{ cursor: "crosshair" }}
-        aria-label={`Price chart, ${changePct.toFixed(1)} percent ${up ? "up" : "down"} over one year${fPoints.length ? ", with projection" : ""}`}
+        className={styles.chart}
+        aria-label={description ?? generatedLabel}
       >
         <defs>
-          <linearGradient id="histFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--data-line)" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="var(--data-line)" stopOpacity="0" />
           </linearGradient>
         </defs>
 
-        <path d={histArea} fill="url(#histFill)" />
+        <path d={histArea} fill={`url(#${fillId})`} />
         {bandPath && <path d={bandPath} fill="var(--ink-muted)" opacity="0.18" />}
-        <path d={histLine} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
+        <path d={histLine} fill="none" stroke="var(--data-line)" strokeWidth="2" strokeLinejoin="round" />
         {forecastLine && (
           <path d={forecastLine} fill="none" stroke="var(--ink-muted)"
                 strokeWidth="1.8" strokeDasharray="4 3" strokeLinejoin="round" />
@@ -126,7 +141,7 @@ export default function PriceChart({ points, forecast, currency }) {
             <line x1={hoverX} y1={pad} x2={hoverX} y2={h - pad}
                   stroke="var(--ink-muted)" strokeWidth="1" opacity="0.45" />
             <circle cx={hoverX} cy={hoverY} r="4"
-                    fill={hovered.isForecast ? "var(--ink-muted)" : "var(--accent)"}
+                    fill={hovered.isForecast ? "var(--ink-muted)" : "var(--data-line)"}
                     stroke="var(--bg-panel)" strokeWidth="2" />
             <rect x={labelX} y={Math.max(pad, hoverY - 30)} width={labelW} height="34"
                   rx="6" fill="var(--bg-deep)" stroke="var(--hairline)" />
@@ -143,16 +158,13 @@ export default function PriceChart({ points, forecast, currency }) {
         )}
       </svg>
 
-      <p style={{ fontSize: 13, color: "var(--ink-muted)", margin: "6px 0 0" }}>
-        1 year:{" "}
-        <span className="tnum" style={{
-          color: up ? "var(--risk-very-low)" : "var(--risk-very-high)",
-          fontWeight: 600,
-        }}>
-          {up ? "+" : ""}{changePct.toFixed(1)}%
-        </span>{" "}
-        ({currency} {first.toFixed(2)} → {last.toFixed(2)})
-      </p>
+      {changeLabel && (
+        <p className={styles.change} data-testid="chart-change">
+          {changeLabel}:{" "}
+          <span className={`${styles.changeValue} tnum`}>{formatChange(changePct)}</span>{" "}
+          ({currency} {first.toFixed(2)} → {last.toFixed(2)})
+        </p>
+      )}
     </div>
   );
 }
