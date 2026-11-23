@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { searchAssets } from "../api";
-import { riskStyle } from "../risk";
+import { tierNumber } from "../riskSpread";
 import styles from "./SearchBar.module.css";
 
 /**
@@ -61,11 +61,14 @@ export default function SearchBar({ onSelectAsset }) {
       {open && results.length > 0 && (
         <ul className={styles.results} role="listbox">
           {results.map((a) => {
-            const tier = riskStyle(a.risk_tier);
+            // Same risk temperature step as the asset's chip, so a dot here
+            // and a chip on the card never disagree about colour.
+            const tierStep = tierNumber(a.risk_tier);
+            const dotColour = tierStep ? `var(--risk-temp-${tierStep})` : "var(--ink-muted)";
             return (
               <li key={a.symbol}>
                 <button className={styles.result} onClick={() => pick(a.symbol)}>
-                  <span className={styles.dot} style={{ background: tier.color }} aria-hidden="true" />
+                  <span className={styles.dot} style={{ background: dotColour }} aria-hidden="true" />
                   <span className={styles.resultSymbol}>{a.symbol}</span>
                   <span className={styles.resultName}>{a.short_name}</span>
                 </button>

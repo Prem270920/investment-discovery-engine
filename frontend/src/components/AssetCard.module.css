@@ -54,12 +54,21 @@
   overflow: visible;
 }
 
+.sparkRest,
 .sparkLine {
   fill: none;
   stroke: var(--data-line);
   stroke-width: 1.5;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+
+/* Low enough to sit back behind the numbers, high enough to read the shape */
+.sparkRest {
+  opacity: 0.3;
+}
+
+.sparkLine {
   /* Undrawn until the card is pointed at, then traced left to right */
   stroke-dasharray: 1;
   stroke-dashoffset: 1;

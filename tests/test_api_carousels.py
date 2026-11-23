@@ -91,16 +91,16 @@ def test_every_pre_r3_field_is_still_present_with_its_value(client):
     assert long_asset["risk_tier"] == "Very low"
 
 
-def test_sparkline_thins_the_last_90_bars_to_30_evenly_spaced_closes(client):
+def test_sparkline_thins_the_last_63_bars_to_30_evenly_spaced_closes(client):
     closes = _assets_by_symbol(client.get("/api/carousels").json())["LONG"]["sparkline_closes"]
     assert len(closes) == 30
-    # The window is bars 30..119; it starts and ends exactly there.
-    assert closes[0] == 30.0
+    # The window is bars 57..119; it starts and ends exactly there.
+    assert closes[0] == 57.0
     assert closes[-1] == 119.0
     assert closes == sorted(closes)
     gaps = {round(later - earlier) for earlier, later in zip(closes, closes[1:])}
-    # 89 bars over 29 gaps is 3.07 bars a gap, so rounding gives 3s and the odd 4.
-    assert gaps <= {3, 4}
+    # 62 bars over 29 gaps is 2.14 bars a gap, so rounding gives 2s and the odd 3.
+    assert gaps <= {2, 3}
 
 
 def test_short_history_is_sent_whole_and_a_single_close_is_null(client):

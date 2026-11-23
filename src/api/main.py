@@ -53,8 +53,9 @@ logger = logging.getLogger("api")
 HOLDOUT_DAYS = 30
 GRU_STATUS_OK = "ok"
 
-# Card sparklines: the last 90 trading days, thinned to 30 points.
-SPARKLINE_WINDOW = 90
+# Card sparklines: the last 63 trading days (about three months), thinned
+# to 30 points. The card's caption says "in 3 months", so the two move together.
+SPARKLINE_WINDOW = 63
 SPARKLINE_POINTS = 30
 
 app = FastAPI(

@@ -17,10 +17,11 @@ const SPARK_HEIGHT = 28;
  * One tile in a carousel: risk chip, symbol, name, sparkline, Sharpe.
  * Clicking it opens the Knowledge Card.
  *
- * Pointing at the card (hover, keyboard focus, or its dot on the risk spread
- * strip) draws in a sparkline of the last 90 trading days and lifts the
+ * At rest the card shows a faint sparkline of the last 63 trading days
+ * (about three months). Pointing at the card (hover, keyboard focus, or its
+ * dot on the risk spread strip) traces it in at full strength and lifts the
  * Sharpe figure slightly. Every number is on the card at rest, including the
- * change over that window; the motion only adds the shape of the trend.
+ * change over that window; the motion only adds emphasis.
  * The line is one neutral colour for every card: direction is in the sign.
  *
  * highlighted lights the card up when its dot on the strip is pointed at;
@@ -90,11 +91,15 @@ export default function AssetCard({ asset, onSelect, highlighted = false, onHigh
         data-testid="card-sparkline"
       >
         {spark && (
-          <path className={styles.sparkLine} d={linePath(spark.coords)} pathLength="1" />
+          <>
+            {/* The faint copy keeps the trend readable before anyone points at the card */}
+            <path className={styles.sparkRest} d={linePath(spark.coords)} data-testid="spark-rest" />
+            <path className={styles.sparkLine} d={linePath(spark.coords)} pathLength="1" data-testid="spark-draw" />
+          </>
         )}
       </svg>
       <span className={`${styles.sparkChange} tnum`} data-testid="card-change">
-        {windowChange === null ? "No recent prices" : `${formatChange(windowChange)} in 90 trading days`}
+        {windowChange === null ? "No recent prices" : `${formatChange(windowChange)} in 3 months`}
       </span>
 
       <span className={styles.metric}>

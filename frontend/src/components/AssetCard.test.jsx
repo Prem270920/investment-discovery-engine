@@ -37,15 +37,24 @@ describe("risk chip", () => {
 });
 
 describe("sparkline", () => {
-  it("draws one path through the closes, held undrawn by a unit stroke dash", () => {
+  it("draws the line through the closes, held undrawn by a unit stroke dash", () => {
     renderCard();
-    const path = screen.getByTestId("card-sparkline").querySelector("path");
+    const path = screen.getByTestId("spark-draw");
     expect(path.getAttribute("pathLength")).toBe("1");
     expect(path.getAttribute("d").match(/[ML]/g)).toHaveLength(30);
   });
 
+  it("shows the whole line faintly at rest, along the same route as the drawn one", () => {
+    renderCard();
+    const restingLine = screen.getByTestId("spark-rest");
+    expect(restingLine.getAttribute("d")).toBe(screen.getByTestId("spark-draw").getAttribute("d"));
+    // No dash on the resting copy, so nothing hides it before the card is pointed at.
+    expect(restingLine.getAttribute("pathLength")).toBeNull();
+    expect(restingLine.getAttribute("class")).not.toBe(screen.getByTestId("spark-draw").getAttribute("class"));
+  });
+
   it("draws every line in the one neutral data colour, whichever way it went", () => {
-    const lineColour = () => screen.getByTestId("card-sparkline").querySelector("path").style.getPropertyValue("--spark-color");
+    const lineColour = () => screen.getByTestId("spark-draw").style.getPropertyValue("--spark-color");
     renderCard();
     expect(lineColour()).toBe("");
     cleanup();
@@ -56,11 +65,11 @@ describe("sparkline", () => {
   it("shows the change over the window as a signed number at rest, with no colour of its own", () => {
     renderCard();
     // 100 to 129 is a 29% rise.
-    expect(screen.getByTestId("card-change").textContent).toBe("+29.0% in 90 trading days");
+    expect(screen.getByTestId("card-change").textContent).toBe("+29.0% in 3 months");
     expect(screen.getByTestId("card-change").style.color).toBe("");
     cleanup();
     renderCard({ sparkline_closes: FALLING });
-    expect(screen.getByTestId("card-change").textContent).toBe("\u221222.5% in 90 trading days");
+    expect(screen.getByTestId("card-change").textContent).toBe("\u221222.5% in 3 months");
   });
 
   it("says so plainly when there are no recent prices", () => {

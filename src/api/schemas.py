@@ -89,7 +89,7 @@ class CarouselAsset(AssetSummary):
     series for the card's hover sparkline, so the dashboard doesn't need one
     prices request per card. Only the carousels endpoint carries it; every
     other AssetSummary payload is unchanged."""
-    # About 30 evenly spaced closes from the last 90 stored trading days,
+    # About 30 evenly spaced closes from the last 63 stored trading days,
     # oldest first. Null when fewer than two prices are stored.
     sparkline_closes: list[float] | None = None
 
