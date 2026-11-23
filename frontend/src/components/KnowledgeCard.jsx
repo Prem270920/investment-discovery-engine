@@ -4,6 +4,7 @@ import { useCurrentSection } from "../hooks/useCurrentSection";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useInView } from "../hooks/useInView";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import OutlookSection from "./OutlookSection";
 import PriceChart from "./PriceChart";
 import RiskChip from "./RiskChip";
 import styles from "./KnowledgeCard.module.css";
@@ -255,39 +256,9 @@ export default function KnowledgeCard({ symbol, onClose }) {
 
             <StorySection id="outlook" label="What might happen">
               {forecast ? (
-                <>
-                  <PriceChart
-                    points={projectionHistory}
-                    forecast={forecast}
-                    currency={asset.currency}
-                    changeLabel={null}
-                    description={`Projection chart: the last three months of prices and the next ${forecast.horizon_days} trading days, with a shaded range of plausible outcomes`}
-                  />
-                  <div className={styles.forecastNote}>
-                    <h3 className={styles.explainerTitle}>The dashed projection</h3>
-                    <p className={styles.para}>
-                      The dashed line projects {forecast.horizon_days} trading days ahead
-                      using an ARIMA model{" "}
-                      {forecast.method === "returns"
-                        ? "fitted to daily returns"
-                        : "fitted to prices directly"}
-                      . The shaded band shows the range of plausible outcomes. Notice it
-                      gets wider the further out it goes, because uncertainty compounds.
-                    </p>
-                    {forecast.backtest_error_pct != null && (
-                      <p className={styles.para}>
-                        <strong>How much should you trust it?</strong> Tested on the most
-                        recent 30 days it had never seen, this model's projections were off
-                        by about{" "}
-                        <span className={`tnum ${styles.figure}`}>
-                          {forecast.backtest_error_pct}%
-                        </span>
-                        {" "}on average. Treat it as an illustration of a statistical trend,
-                        not a prediction of what will happen.
-                      </p>
-                    )}
-                  </div>
-                </>
+                // Keyed by asset so a related asset starts on ARIMA with a fresh replay.
+                <OutlookSection key={asset.symbol} forecast={forecast}
+                                history={projectionHistory} currency={asset.currency} />
               ) : (
                 <p className={styles.para}>No projection is available for this asset yet.</p>
               )}

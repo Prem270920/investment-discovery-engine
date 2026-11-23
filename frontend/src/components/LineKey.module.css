@@ -1,0 +1,20 @@
+.key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sample {
+  flex-shrink: 0;
+}
