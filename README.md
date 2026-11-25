@@ -39,22 +39,35 @@ cd frontend && npm install && npm run dev    # UI on :5173
 
 The clustering model is committed to the repo (`models/cluster_model.joblib`), so you'll get the same six categories I did rather than whatever the market happened to be doing when you cloned it. If you want to retrain: `python -m src.ml.train_clusters`.
 
-Add `--skip-forecasts` to the pipeline command for a faster run. The ARIMA stage is the slow part.
+Add `--skip-forecasts` to the pipeline command for a faster run. The ARIMA stage is the slow part. Skipped stages keep whatever forecasts are already stored.
+
+The GRU lens (more on it below) needs PyTorch, which lives in a separate requirements file so the app still runs without it:
+
+```bash
+pip install -r requirements-ml.txt
+```
+
+Without torch, or with `DISCOVERY_DISABLE_TORCH=1` set, the pipeline marks every asset's GRU as skipped and the app shows ARIMA alone. `--skip-neural` skips the GRU stage on purpose. To print the head to head comparison after a run:
+
+```bash
+python -m src.ml.lens_report
+```
 
 ---
 
 ## How it fits together
 
 ```
-yfinance  →  validate  →  SQLite  →  metrics  →  cluster  →  FastAPI  →  React
-                ↓                       ↓           ↓
-          override map            vol/Sharpe/beta  frozen
-          for bad vendor data     ARIMA forecast   model
+yfinance  →  validate  →  SQLite  →  metrics  →  cluster  →  forecasts  →  FastAPI  →  React
+                ↓                       ↓           ↓            ↓
+          override map            vol/Sharpe/beta  frozen     ARIMA, then a
+          for bad vendor data                      model      GRU scored on the
+                                                              same held out days
 ```
 
 Everything is a batch job. The app never calls yfinance at request time; it reads from its own database. That means it stays up when Yahoo doesn't, and it isn't hostage to rate limits.
 
-The pipeline runs five stages inside a single transaction: ingest assets, ingest benchmarks, compute metrics, assign clusters, generate forecasts. If any stage fails the whole thing rolls back, so you never end up with assets but no metrics.
+The pipeline runs its stages inside a single transaction: ingest assets, ingest benchmarks, compute metrics, assign clusters, ARIMA forecasts, GRU forecasts (stage 5b), plain English descriptions. If any stage fails the whole thing rolls back, so you never end up with assets but no metrics. The GRU stage is the exception that proves the rule: a missing torch or one asset's failed training is recorded per asset and the run carries on, because an optional model shouldn't be able to sink the data everything else depends on.
 
 **56 assets, ~14,000 price bars, six clusters.**
 
@@ -131,6 +144,80 @@ The error tracks risk almost perfectly, which is the nicest validation of the wh
 The model is measurably better at boring assets and worse at exciting ones. That isn't a disclaimer, it's evidence: "trust this less for TSLA" becomes something the app can *demonstrate* rather than assert.
 
 Under the hood it fits two competing models per asset (ARIMA on prices and ARIMA on returns), with the order auto-selected by AIC, backtests both, and keeps whichever won. Across 56 assets the split was roughly 39 to 17, so both approaches are earning their place rather than one always winning.
+
+---
+
+## Second forecasting lens
+
+ARIMA is a classic statistical model. I wanted to know whether a neural network does any better on the same job, so every asset now also gets a GRU forecast, and the two are judged head to head on the same 30 days neither model saw in training. The asset page shows both projections, replays the test day by day, and says who won.
+
+### Why a GRU, and why such a small one
+
+The data is the constraint. Each asset has about a year of daily prices: 254 to 258 bars. Hold out 30 days for the test, turn the rest into daily returns and cut those into 30 day windows, and the GRU gets about 156 training windows per asset. That is tiny for a neural network.
+
+So the model is deliberately small: 32 hidden units and 3,393 trainable weights in total, trained with early stopping on a validation slice and a fixed seed so reruns give the same answer. A GRU rather than an LSTM because it has fewer moving parts for the same idea, which matters when there's this little to learn from. Anything bigger would memorise the year rather than learn from it.
+
+### Per asset now, global later
+
+Each asset's GRU trains on that asset's history alone. One model trained across all 56 assets would see about 8,700 windows instead of about 156, which is the obvious answer to the data problem. It also raises questions the per asset version doesn't: does a bond fund's history help forecast NVIDIA? Starting per asset keeps each result readable. The windowing code already takes a list of price series rather than one, so pooling them into a global model is a small change when I want to test it.
+
+### Same test, same rules
+
+The comparison is only fair if both models sit the same exam. They're scored on the same 30 held out days with the same error measure (RMSE as a percent of price). The GRU predicts daily returns and turns them back into prices exactly the way ARIMA's returns model does, and its band is set to the same 95% confidence level and widens the same way. The pipeline records the verdict once, and the API and the app read it from there.
+
+A gap under 0.05 percentage points is recorded as **too close to call** rather than a win. The errors are stored to two decimals and come from a single 30 day test, which can't separate two models that close.
+
+### The result
+
+From `python -m src.ml.lens_report`:
+
+```
+Second forecasting lens: GRU against ARIMA on the same 30 held out days
+Prices through 2026-11-25
+Assets compared: 56 (not compared: 0)
+
+Outcomes
+  ARIMA wins          35
+  GRU wins            15
+  Too close to call    6
+
+Median backtest error (RMSE, percent of price)
+  ARIMA   4.01%
+  GRU     4.71%
+
+Median backtest error by cluster
+  Cluster                     Assets    ARIMA      GRU
+  Broad Market Core               14    2.69%    3.72%
+  Higher-Risk Growth               7    4.27%    6.31%
+  Income Generators               15    4.33%    4.32%
+  Market-Neutral Defensives        8    5.94%    5.44%
+  Recent Underperformers           5    6.63%    7.54%
+  Safe & Steady                    7    1.41%    1.27%
+
+Biggest GRU wins (margin in percentage points)
+  PG       ARIMA   7.62%  GRU   5.84%  margin  1.78
+  JNJ      ARIMA   7.31%  GRU   5.91%  margin  1.40
+  KO       ARIMA   3.90%  GRU   2.89%  margin  1.01
+  XLU      ARIMA   3.19%  GRU   2.68%  margin  0.51
+  XLP      ARIMA   5.51%  GRU   5.03%  margin  0.48
+
+Biggest ARIMA wins (margin in percentage points)
+  NVDA     ARIMA  24.91%  GRU  32.65%  margin  7.74
+  BHP.AX   ARIMA   8.92%  GRU  12.99%  margin  4.07
+  XLE      ARIMA   6.36%  GRU   9.67%  margin  3.31
+  RIO.AX   ARIMA  10.20%  GRU  12.50%  margin  2.30
+  MQG.AX   ARIMA   4.27%  GRU   6.31%  margin  2.04
+```
+
+### An honest reading
+
+**The neural network is not the better forecaster here.** ARIMA won 35 assets, the GRU 15, and 6 were too close to call. The median error is 4.01% for ARIMA against 4.71% for the GRU. With about 156 training windows per asset, that's roughly what I'd expect: the simpler model has fewer ways to go wrong on so little data.
+
+**But where it loses isn't random.** All five of the GRU's biggest wins (PG, JNJ, KO, XLU, XLP) sit in the Market-Neutral Defensives cluster: household goods, healthcare, drinks, utilities and staples. It also has the lower median error in Safe & Steady (1.27% against 1.41%) and Market-Neutral Defensives (5.44% against 5.94%), and is level in Income Generators (4.32% against 4.33%). ARIMA's biggest wins are the big movers: NVDA, the miners BHP.AX and RIO.AX, MQG.AX and the energy ETF XLE, and it leads clearly in Higher-Risk Growth (4.27% against 6.31%). The same defensive cluster holds XLE, though, so cluster membership alone isn't the story. My guess is that on so little data the GRU learns something close to "daily returns are small and drift back", which suits calm assets and fails on ones making large sustained moves. That's a hypothesis I haven't tested.
+
+**It's one 30 day test, and it moves.** These numbers come from a single window of held out days, so read them as this month's exam rather than a law. Between two runs one trading day apart, AAPL went from too close to call (ARIMA 1.63%, GRU 1.62%) to a clear ARIMA win (1.38% against 1.48%), simply because the held out window moved forward by a day.
+
+**Even the inputs move.** While building this I ran the pipeline twice a few minutes apart, with both markets closed, expecting identical results. yfinance returned different adjusted closes for 1,891 of the 14,938 stored price rows across 46 symbols, almost all by less than one part in two million. Noise that small was enough to change ARIMA's chosen order for VAP.AX from (1,1,1) to (2,1,2), and to move backtest errors by up to 0.09 percentage points (IVV.AX from 2.23% to 2.31%; KO from 5.91% to 5.82%, with only two of its prices revised). That is bigger than the 0.05 point too close threshold, so a revision alone can flip a close head to head result. It's another reason not to crown a winner on a tiny gap. It's also why, when I check that a code change didn't alter ARIMA's results, I compare runs on a copy of the database with prices held fixed, never two fresh fetches.
 
 ---
 
