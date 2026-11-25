@@ -48,8 +48,6 @@ INFO_FIELDS = [
 HISTORY_PERIOD = "1y"
 RETRY_BACKOFF_SECONDS = 2.0
 
-descriptions_ok = 0
-descriptions_skipped = 0
 
 class FetchError(Exception):
     """Raised when usable raw data can't be retrieved for a ticker."""
@@ -119,9 +117,6 @@ def _ingest_assets(session) -> tuple[int, int, dict]:
 
     return assets_stored, prices_inserted, failures
 
-assets_clustered = 0
-forecasts_ok = 0
-forecasts_skipped = 0
 
 def run(recreate: bool = False, skip_forecasts: bool = False, skip_neural: bool = False):
     if recreate:
@@ -131,6 +126,11 @@ def run(recreate: bool = False, skip_forecasts: bool = False, skip_neural: bool 
     logger.info("schema ready (assets, prices, asset_metrics)")
 
     neural_counts = None  # stays None when stage 5b doesn't run
+    # Set before the stages so --skip-forecasts still has counts to report.
+    # They used to live only at module level, and assigning them inside this
+    # function made Python treat them as unset locals when stage 5 was skipped.
+    forecasts_ok = 0
+    forecasts_skipped = 0
 
     session = SessionLocal()
     try:
@@ -198,8 +198,11 @@ def run(recreate: bool = False, skip_forecasts: bool = False, skip_neural: bool 
     print(f"  assets clustered       : {assets_clustered}")
     print(f"  fetch failures         : {len(failures['fetch'])}")
     print(f"  validation rejections  : {len(failures['validation'])}")
-    print(f"  forecasts computed     : {forecasts_ok}")
-    print(f"  forecasts skipped      : {forecasts_skipped}")
+    if skip_forecasts:
+        print("  ARIMA forecasts        : skipped (--skip-forecasts)")
+    else:
+        print(f"  forecasts computed     : {forecasts_ok}")
+        print(f"  forecasts skipped      : {forecasts_skipped}")
     if neural_counts is None:
         print("  GRU forecasts          : skipped (--skip-neural)")
     else:
