@@ -1,45 +1,53 @@
 import { describe, expect, it } from "vitest";
-import { TOO_CLOSE_TO_CALL_PCT_POINTS, headToHeadSentence, judgeHeadToHead } from "./headToHead";
+import * as headToHead from "./headToHead";
 
-describe("judgeHeadToHead", () => {
-  it("names the model with the lower error", () => {
-    expect(judgeHeadToHead(8.19, 5.47)).toEqual({ verdict: "gru", badge: "GRU wins", gapPctPoints: 2.72 });
-    expect(judgeHeadToHead(22.8, 27.72)).toEqual({ verdict: "arima", badge: "ARIMA wins", gapPctPoints: 4.92 });
+const { formatErrorPct, headToHeadSentence, verdictBadge } = headToHead;
+
+const result = (winner, arima, gru) => ({
+  winner, arima_rmse_pct: arima, gru_rmse_pct: gru, margin_pct_points: Math.abs(arima - gru), holdout_days: 30,
+});
+
+describe("verdictBadge", () => {
+  it("words each verdict the pipeline can store", () => {
+    expect(verdictBadge("gru")).toBe("GRU wins");
+    expect(verdictBadge("arima")).toBe("ARIMA wins");
+    expect(verdictBadge("too_close")).toBe("Too close to call");
   });
 
-  it("calls anything under the threshold too close to call", () => {
-    expect(TOO_CLOSE_TO_CALL_PCT_POINTS).toBe(0.05);
-    expect(judgeHeadToHead(1.63, 1.62).verdict).toBe("close");
-    expect(judgeHeadToHead(1.62, 1.63).badge).toBe("Too close to call");
-    expect(judgeHeadToHead(8.44, 8.44).verdict).toBe("close");
-    expect(judgeHeadToHead(1.36, 1.32).verdict).toBe("close");
+  it("has nothing to say for a missing or unknown verdict", () => {
+    expect(verdictBadge(null)).toBeNull();
+    expect(verdictBadge(undefined)).toBeNull();
+    expect(verdictBadge("draw")).toBeNull();
   });
 
-  it("names a winner at exactly the threshold, whatever floating point does to the subtraction", () => {
-    // 1.37 - 1.32 is 0.050000000000000044 and 2.46 - 2.41 is 0.04999999999999982.
-    expect(judgeHeadToHead(1.37, 1.32).verdict).toBe("gru");
-    expect(judgeHeadToHead(2.46, 2.41).verdict).toBe("gru");
-    expect(judgeHeadToHead(1.81, 1.86).verdict).toBe("arima");
-  });
-
-  it("has no verdict without both scores", () => {
-    expect(judgeHeadToHead(1.5, null)).toBeNull();
-    expect(judgeHeadToHead(null, 1.5)).toBeNull();
+  it("no longer holds a threshold of its own", () => {
+    expect(Object.keys(headToHead)).not.toContain("TOO_CLOSE_TO_CALL_PCT_POINTS");
+    expect(Object.keys(headToHead)).not.toContain("judgeHeadToHead");
   });
 });
 
 describe("headToHeadSentence", () => {
   it("gives both errors for a clear result", () => {
-    expect(headToHeadSentence(8.19, 5.47, 30))
+    expect(headToHeadSentence(result("gru", 8.19, 5.47)))
       .toBe("Tested on the same 30 unseen days. ARIMA off by 8.19%. GRU off by 5.47%.");
+    expect(headToHeadSentence(result("arima", 22.8, 27.72)))
+      .toBe("Tested on the same 30 unseen days. ARIMA off by 22.80%. GRU off by 27.72%.");
   });
 
-  it("says both were about equally accurate when too close to call", () => {
-    expect(headToHeadSentence(1.63, 1.62, 30))
+  it("says both were about equally accurate for a too close verdict", () => {
+    expect(headToHeadSentence(result("too_close", 1.63, 1.62)))
       .toBe("Tested on the same 30 unseen days. ARIMA off by 1.63%. GRU off by 1.62%. Both models were about equally accurate.");
   });
 
-  it("is null without a GRU score", () => {
-    expect(headToHeadSentence(1.63, null, 30)).toBeNull();
+  it("is null without a verdict", () => {
+    expect(headToHeadSentence(null)).toBeNull();
+    expect(headToHeadSentence(result(null, 1.63, 1.62))).toBeNull();
+  });
+});
+
+describe("formatErrorPct", () => {
+  it("always shows two decimals", () => {
+    expect(formatErrorPct(22.8)).toBe("22.80%");
+    expect(formatErrorPct(1.6)).toBe("1.60%");
   });
 });

@@ -12,13 +12,14 @@ const lens = (start, rmsePct) => ({
   rmse_pct: rmsePct,
 });
 
-function apiForecast({ arimaError = 8.19, gruError = 5.47, withGru = true, withBacktest = true } = {}) {
+// winner is whatever the API says; the section shows it without re-deciding.
+function apiForecast({ arimaError = 8.19, gruError = 5.47, winner = "gru", withGru = true, withBacktest = true } = {}) {
   return {
     symbol: "PG", method: "returns", arima_order: "(1, 0, 0)", backtest_error_pct: arimaError, horizon_days: 30,
     points: lens(106, arimaError).path.map((day) => ({ ...day, lower: day.predicted - 3, upper: day.predicted + 3 })),
     lenses: { arima: lens(106, arimaError), gru: withGru ? lens(110, gruError) : null },
     head_to_head: {
-      winner: withGru ? (gruError < arimaError ? "gru" : "arima") : null,
+      winner: withGru ? winner : null,
       arima_rmse_pct: arimaError, gru_rmse_pct: withGru ? gruError : null,
       margin_pct_points: withGru ? Math.abs(arimaError - gruError) : null, holdout_days: 30,
     },
@@ -96,17 +97,34 @@ describe("head to head", () => {
   });
 
   it("names a clear ARIMA win, with the same two decimals in the trust figure", () => {
-    renderSection(apiForecast({ arimaError: 22.8, gruError: 27.72 }));
+    renderSection(apiForecast({ arimaError: 22.8, gruError: 27.72, winner: "arima" }));
     expect(screen.getByText("22.80%")).toBeTruthy();
     expect(screen.getByTestId("head-to-head").textContent)
       .toBe("ARIMA wins Tested on the same 30 unseen days. ARIMA off by 22.80%. GRU off by 27.72%.");
   });
 
-  it("calls a gap under 0.05 points too close, even though the API names a winner", () => {
-    renderSection(apiForecast({ arimaError: 1.63, gruError: 1.62 }));
+  it("shows the API's too close verdict with the equally accurate sentence", () => {
+    renderSection(apiForecast({ arimaError: 1.63, gruError: 1.62, winner: "too_close" }));
     expect(screen.getByTestId("head-to-head").textContent).toBe(
       "Too close to call Tested on the same 30 unseen days. ARIMA off by 1.63%. GRU off by 1.62%. Both models were about equally accurate.",
     );
+  });
+
+  it("takes the verdict from the API rather than working it out from the errors", () => {
+    // Errors this close would once have been judged here; now the stored verdict wins.
+    renderSection(apiForecast({ arimaError: 1.63, gruError: 1.62, winner: "gru" }));
+    expect(screen.getByTestId("head-to-head").textContent).toMatch(/^GRU wins /);
+    cleanup();
+    renderSection(apiForecast({ arimaError: 8.19, gruError: 5.47, winner: "too_close" }));
+    expect(screen.getByTestId("head-to-head").textContent).toMatch(/^Too close to call /);
+  });
+
+  it("leaves the line out when the API gives no verdict it knows", () => {
+    renderSection(apiForecast({ winner: null }));
+    expect(screen.queryByTestId("head-to-head")).toBeNull();
+    cleanup();
+    renderSection(apiForecast({ winner: "draw" }));
+    expect(screen.queryByTestId("head-to-head")).toBeNull();
   });
 
   it("is on screen from the start, under the replay", () => {

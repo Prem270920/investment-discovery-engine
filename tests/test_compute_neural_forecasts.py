@@ -93,12 +93,26 @@ def _gru_row_count(session, symbol):
 @pytest.mark.parametrize(("arima", "gru", "winner"), [
     (2.0, 1.0, GRU_LENS),
     (1.0, 2.0, ARIMA_LENS),
-    (1.0, 1.0, ARIMA_LENS),  # tie goes to the simpler model
+    (8.19, 5.47, GRU_LENS),
+    (22.8, 27.72, ARIMA_LENS),
+    (1.0, 1.0, stage.TOO_CLOSE),  # an exact tie no longer goes to ARIMA
+    (1.63, 1.62, stage.TOO_CLOSE),
+    (1.32, 1.36, stage.TOO_CLOSE),
+    # Exactly 0.05 apart is a clear result, even where floating point
+    # subtraction lands a hair under (2.46 - 2.41 is 0.04999999999999982).
+    (1.37, 1.32, GRU_LENS),
+    (2.46, 2.41, GRU_LENS),
+    (1.81, 1.86, ARIMA_LENS),
     (None, 1.0, None),
     (1.0, None, None),
 ])
 def test_pick_winner(arima, gru, winner):
     assert stage.pick_winner(arima, gru) == winner
+
+
+def test_threshold_is_five_hundredths_of_a_point():
+    assert stage.TOO_CLOSE_TO_CALL_PCT_POINTS == 0.05
+    assert stage.TOO_CLOSE == "too_close"
 
 
 def test_stage_stores_gru_rows_status_and_winner(session, stub_gru):
@@ -120,6 +134,16 @@ def test_stage_stores_the_gru_replay_on_the_last_30_price_days(session, stub_gru
     assert [day.date for day in replay] == [FIRST_PRICE_DAY + timedelta(days=70 + offset) for offset in range(30)]
     assert [day.actual for day in replay] == [170.0 + offset for offset in range(30)]
     assert [day.predicted for day in replay] == [171.0 + offset for offset in range(30)]
+
+
+def test_stage_stores_too_close_when_the_errors_are_nearly_equal(session, monkeypatch):
+    monkeypatch.setattr(stage, "torch_available", lambda: True)
+    # ARIMA scored 2.0, 1.0 and 1.5 in the fixture; the GRU lands within 0.05 of each.
+    near_misses = iter([1.98, 1.04, 1.5])
+    monkeypatch.setattr(stage, "forecast_asset_gru", lambda closes: _gru_result(next(near_misses)))
+    stage.compute_and_store_neural_forecasts(session)
+    for symbol in ARIMA_ERRORS:
+        assert get_forecast_meta(session, symbol).head_to_head_winner == "too_close"
 
 
 def test_one_failing_asset_is_marked_failed_and_others_continue(session, stub_gru):

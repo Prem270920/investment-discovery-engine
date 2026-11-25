@@ -94,6 +94,19 @@ def gru_winner(scratch_session):
 
 
 @pytest.fixture
+def too_close(scratch_session):
+    """AAPL: both models ran and finished within 0.05 points of each other."""
+    _add_asset(scratch_session, "AAPL")
+    _store_projection(scratch_session, "AAPL", ARIMA_LENS, start_price=200.0)
+    _store_projection(scratch_session, "AAPL", GRU_LENS, start_price=300.0)
+    replace_backtest(scratch_session, "AAPL", ARIMA_LENS, HELD_OUT_DAYS, REAL_CLOSES, ARIMA_GUESSES)
+    replace_backtest(scratch_session, "AAPL", GRU_LENS, HELD_OUT_DAYS, REAL_CLOSES, GRU_GUESSES)
+    upsert_arima_meta(scratch_session, "AAPL", "returns", "(1, 0, 0)", 1.63, 30)
+    update_gru_meta(scratch_session, "AAPL", "ok", gru_rmse_pct=1.62, head_to_head_winner="too_close")
+    scratch_session.commit()
+
+
+@pytest.fixture
 def gru_skipped(scratch_session):
     """SHY: GRU never ran because torch was unavailable."""
     _add_asset(scratch_session, "SHY")
@@ -140,6 +153,27 @@ def test_head_to_head_reports_winner_and_margin(client, gru_winner):
         "margin_pct_points": 0.3,
         "holdout_days": 30,
     }
+
+
+def test_head_to_head_passes_through_too_close(client, too_close):
+    forecast_body = client.get("/api/assets/AAPL/forecast").json()
+    assert forecast_body["head_to_head"] == {
+        "winner": "too_close",
+        "arima_rmse_pct": 1.63,
+        "gru_rmse_pct": 1.62,
+        "margin_pct_points": 0.01,
+        "holdout_days": 30,
+    }
+    # A close result is still a full comparison: both lenses and both replays are served.
+    assert forecast_body["lenses"]["gru"]["rmse_pct"] == 1.62
+    assert forecast_body["backtest"]["gru"] == GRU_GUESSES
+
+
+def test_too_close_is_dropped_with_the_gru_lens(client, scratch_session, too_close):
+    # No served GRU means no comparison, so even a stored verdict is not shown.
+    replace_forecast(scratch_session, "AAPL", [], [], [], [], lens=GRU_LENS)
+    scratch_session.commit()
+    assert client.get("/api/assets/AAPL/forecast").json()["head_to_head"]["winner"] is None
 
 
 def test_gru_is_null_and_head_to_head_empty_when_not_ok(client, gru_skipped):

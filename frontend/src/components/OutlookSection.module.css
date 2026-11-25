@@ -61,6 +61,6 @@
   color: var(--ink);
 }
 
-.badge[data-verdict="close"] {
+.badge[data-verdict="too_close"] {
   border-style: dashed;
 }

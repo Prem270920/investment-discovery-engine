@@ -152,7 +152,7 @@ class ForecastMeta(Base):
     gru_status: Mapped[str] = mapped_column(
         String, nullable=False, default=GRU_NOT_RUN, server_default=GRU_NOT_RUN
     )  # 'not_run' | 'ok' | 'skipped_no_torch' | 'failed'
-    head_to_head_winner: Mapped[str | None] = mapped_column(String, nullable=True)  # 'arima' | 'gru'
+    head_to_head_winner: Mapped[str | None] = mapped_column(String, nullable=True)  # 'arima' | 'gru' | 'too_close'
 
     computed_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

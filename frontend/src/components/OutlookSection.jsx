@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { lensPoints } from "../forecastLines";
-import { formatErrorPct, headToHeadSentence, judgeHeadToHead } from "../headToHead";
+import { formatErrorPct, headToHeadSentence, verdictBadge } from "../headToHead";
 import BacktestRace from "./BacktestRace";
 import LineKey from "./LineKey";
 import PriceChart from "./PriceChart";
@@ -41,15 +41,14 @@ export default function OutlookSection({ forecast, history, currency }) {
   const shownModelIds = projections.map((projection) => projection.id);
 
   const days = forecast.horizon_days;
+  // The pipeline decides the verdict; this only shows it.
   const headToHead = gruLens ? forecast.head_to_head : null;
-  const judgement = headToHead ? judgeHeadToHead(headToHead.arima_rmse_pct, headToHead.gru_rmse_pct) : null;
-  const sentence = headToHead
-    ? headToHeadSentence(headToHead.arima_rmse_pct, headToHead.gru_rmse_pct, headToHead.holdout_days)
-    : null;
+  const badge = verdictBadge(headToHead?.winner);
+  const sentence = headToHeadSentence(headToHead);
 
-  const headToHeadLine = judgement && (
+  const headToHeadLine = badge && sentence && (
     <p className={styles.headToHead} data-testid="head-to-head">
-      <span className={styles.badge} data-verdict={judgement.verdict}>{judgement.badge}</span>{" "}
+      <span className={styles.badge} data-verdict={headToHead.winner}>{badge}</span>{" "}
       {sentence}
     </p>
   );

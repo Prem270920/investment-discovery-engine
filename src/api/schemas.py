@@ -151,7 +151,7 @@ class ForecastLenses(BaseModel):
 class HeadToHead(BaseModel):
     """Both lenses scored on the same held out days. Fields are null when
     there is no GRU result to compare against."""
-    winner: str | None = None             # 'arima' | 'gru'
+    winner: str | None = None             # 'arima' | 'gru' | 'too_close'
     arima_rmse_pct: float | None = None
     gru_rmse_pct: float | None = None
     margin_pct_points: float | None = None  # gap between the two errors, always >= 0

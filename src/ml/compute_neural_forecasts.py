@@ -6,7 +6,8 @@ transaction. For each asset that has an ARIMA forecast summary it:
   * trains the seeded GRU and stores its 30 day path under lens "gru",
   * stores what it predicted for the 30 held out days, for the replay,
   * records gru_rmse_pct and gru_status on forecast_meta,
-  * sets head_to_head_winner by comparing the GRU backtest error with ARIMA's.
+  * sets head_to_head_winner by comparing the GRU backtest error with ARIMA's:
+    "arima", "gru", or "too_close" when the gap is too small to call.
 
 The stage never sinks the run. If torch is unavailable every asset is marked
 "skipped_no_torch". If one asset fails it is marked "failed" and the loop
@@ -34,13 +35,27 @@ GRU_OK = "ok"
 GRU_FAILED = "failed"
 GRU_SKIPPED_NO_TORCH = "skipped_no_torch"
 
+# head_to_head_winner when neither model clearly did better.
+TOO_CLOSE = "too_close"
+
+# Both errors are stored to 2 decimals and come from a single 30 day test. A
+# gap under 0.05 percentage points is too small for one test to separate the
+# models, so naming a winner would claim more than the test shows.
+TOO_CLOSE_TO_CALL_PCT_POINTS = 0.05
+
 
 def pick_winner(arima_rmse_pct: float | None, gru_rmse_pct: float | None) -> str | None:
     """Lower backtest error wins. Both numbers are RMSE as percent of price on
-    the same 30 day holdout, so they compare directly. A tie goes to ARIMA,
-    the simpler model. Returns None if either side has no score."""
+    the same 30 day holdout, so they compare directly. A gap under
+    TOO_CLOSE_TO_CALL_PCT_POINTS, exact ties included, is TOO_CLOSE rather
+    than a win for either side. Returns None if either side has no score."""
     if arima_rmse_pct is None or gru_rmse_pct is None:
         return None
+    # Rounded to the stored precision before and after subtracting, so 1.37
+    # against 1.32 is exactly 0.05 apart rather than 0.0499999 in floating point.
+    gap_pct_points = round(abs(round(arima_rmse_pct, 2) - round(gru_rmse_pct, 2)), 2)
+    if gap_pct_points < TOO_CLOSE_TO_CALL_PCT_POINTS:
+        return TOO_CLOSE
     return GRU_LENS if gru_rmse_pct < arima_rmse_pct else ARIMA_LENS
 
 
