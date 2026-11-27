@@ -12,8 +12,10 @@ Then open http://127.0.0.1:8000/docs for interactive Swagger docs.
 
 import logging
 from datetime import date, timedelta
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -43,10 +45,14 @@ from src.storage.models import (
     ARIMA_LENS, GRU_LENS, Asset, AssetDescription, AssetMetric, BacktestPrediction, Forecast,
     ForecastMeta, Price,
 )
+from src.config import CORS_ORIGINS, DATABASE_PATH, FRONTEND_DIST, LOG_LEVEL
 from src.storage.database import SessionLocal
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# uvicorn sets up its own loggers but not the root one, so without this the
+# app's warnings would only reach the console through Python's last resort.
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("api")
 
 # Mirrors forecasting.BACKTEST_DAYS and compute_neural_forecasts.GRU_OK.
@@ -72,10 +78,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    # Only needed when the page comes from another address, like the Vite
+    # dev server. The built frontend served below shares the API's address.
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -642,3 +647,41 @@ def get_description(symbol: str, db: Session = Depends(get_db)) -> AssetDescript
         summary_readability=desc.summary_readability,
     )
 
+
+def serve_frontend(api_app: FastAPI, dist_dir: Path) -> bool:
+    """Serve the built React app from dist_dir at /, beside the API.
+
+    Any path that isn't an API route and isn't a real file in the build gets
+    index.html, so a refreshed or shared link inside the app still loads the
+    app. Paths under /api never fall through to the page: an unknown API path
+    stays a JSON 404 rather than quietly returning HTML.
+
+    Registered after every API route so those always match first. Without a
+    build the API runs on its own and says so once, which is the normal state
+    in local development, where Vite serves the page.
+    """
+    if not (dist_dir / "index.html").is_file():
+        logger.warning(
+            "no built frontend at %s, so only the API is served; run npm run build in frontend/ to serve the app too",
+            dist_dir,
+        )
+        return False
+    build_root = dist_dir.resolve()
+
+    @api_app.get("/{page_path:path}", include_in_schema=False)
+    def frontend_page(page_path: str) -> FileResponse:
+        if page_path == "api" or page_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if page_path:
+            # Resolved and checked, so ../ can never reach outside the build.
+            requested_file = (build_root / page_path).resolve()
+            if requested_file.is_relative_to(build_root) and requested_file.is_file():
+                return FileResponse(requested_file)
+        return FileResponse(build_root / "index.html")
+
+    logger.info("serving the built frontend from %s", build_root)
+    return True
+
+
+logger.info("reading the database at %s", DATABASE_PATH)
+serve_frontend(app, FRONTEND_DIST)

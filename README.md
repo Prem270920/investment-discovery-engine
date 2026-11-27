@@ -18,6 +18,19 @@ Australia + US + global, because I'm in Melbourne and most tools are US-only.
 
 ---
 
+## What's in the app
+
+The interface is built as an interactive data story: the page explains, and you steer by scrolling, hovering and tapping.
+
+- **Themed rows from a clustering model**, each with a **risk spread strip**: one dot per asset on a calm to volatile track, so a row's risk mix shows at a glance. Point at a dot and its card lights up.
+- **The market backdrop**: the S&P 500's year at the top, for context.
+- **Asset cards** with a risk chip, a three month sparkline and its change, and a plain explanation of the Sharpe ratio.
+- **A four part story for each asset**: what it is, how it moves, what might happen, and similar assets, with a sticky index to jump between them. Summaries are in plain English, with a glossary for the jargon.
+- **Two forecasts and a backtest race**: ARIMA and a GRU neural network each project 30 days ahead. Replay the test both sat and watch their predictions draw beside the real price, then see who won, or whether it was too close to call.
+- **Colour only ever means risk.** Price lines are one neutral colour and direction is shown by the + or minus sign. Motion is extra, never required: with reduced motion on, everything shows its final state, and every control is keyboard reachable.
+
+---
+
 ## Running it
 
 ```bash
@@ -52,6 +65,26 @@ Without torch, or with `DISCOVERY_DISABLE_TORCH=1` set, the pipeline marks every
 ```bash
 python -m src.ml.lens_report
 ```
+
+### In production
+
+In production there's one server. Build the frontend once, then FastAPI serves the app at `/` and the API under `/api` from the same address, so there's no Vite and no CORS to configure:
+
+```bash
+cd frontend && npm ci && npm run build && cd ..
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+
+No `--reload` here: that's a development convenience that watches files and restarts. Use whatever port your host gives you. If `frontend/dist` is missing, the API still starts, logs one warning, and serves only `/api`.
+
+Settings come from environment variables, and none are needed to run locally:
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `DISCOVERY_DATABASE_PATH` | `data/investments.db` | The SQLite file. Relative paths start from the repo root. |
+| `DISCOVERY_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma separated origins allowed to call the API from another address. Set it empty when the API serves the frontend itself. |
+| `DISCOVERY_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`. An unknown value stops startup with a message. |
+| `DISCOVERY_DISABLE_TORCH` | unset | Set to `1` to run the pipeline without the GRU lens. |
 
 ---
 
@@ -127,23 +160,23 @@ Forecasting asset prices is not reliably possible. If it were, none of us would 
 
 Two things make it honest.
 
-**The confidence band widens.** Uncertainty compounds: being unsure about tomorrow is very different from being unsure about six weeks out. Variance grows with the number of steps, so the band grows with √n. For VAS.AX it goes from 3.25 wide on day one to 18.01 by day thirty. You can watch it fan out. That's the lesson, delivered visually.
+**The confidence band widens.** Uncertainty compounds: being unsure about tomorrow is very different from being unsure about six weeks out. Variance grows with the number of steps, so the band grows with √n. For VAS.AX it goes from 3.38 wide on day one to 18.64 by day thirty. You can watch it fan out. That's the lesson, delivered visually.
 
-**Each forecast reports its own measured error.** I hold out the last 30 days, train on everything before that, and check how far off the projection was on data the model never saw. That number goes on the page: *"tested on 30 days it had never seen, this model was off by about 0.71%."*
+**Each forecast reports its own measured error.** I hold out the last 30 days, train on everything before that, and check how far off the projection was on data the model never saw. That number goes on the page. For VAS.AX it reads: *"Tested on the most recent 30 days it had never seen, this model's projections were off by about 2.24% on average."*
 
-The error tracks risk almost perfectly, which is the nicest validation of the whole thing:
+The error broadly tracks risk, which is the nicest validation of the whole thing. Across all 56 assets the rank correlation between backtest error and volatility is 0.69, and the median error climbs from 1.54% for the "Very low risk" assets to 6.63% for the "Very high risk" ones. Single assets don't always follow it, though: in this run AAPL's error came in just below BND's. Prices run through 25 November 2026:
 
-| Asset | Backtest error |
-|---|---|
-| SHY (short treasuries) | 0.12% |
-| BND (total bond market) | 0.53% |
-| VOO (S&P 500) | 1.93% |
-| AAPL | 5.11% |
-| CSL.AX | 9.85% |
+| Asset | Risk tier | Backtest error |
+|---|---|---|
+| SHY (short treasuries) | Very low | 0.44% |
+| BND (total bond market) | Very low | 1.41% |
+| VOO (S&P 500) | Low | 4.46% |
+| AAPL | Very high | 1.38% |
+| CSL.AX | Very high | 6.63% |
 
 The model is measurably better at boring assets and worse at exciting ones. That isn't a disclaimer, it's evidence: "trust this less for TSLA" becomes something the app can *demonstrate* rather than assert.
 
-Under the hood it fits two competing models per asset (ARIMA on prices and ARIMA on returns), with the order auto-selected by AIC, backtests both, and keeps whichever won. Across 56 assets the split was roughly 39 to 17, so both approaches are earning their place rather than one always winning.
+Under the hood it fits two competing models per asset (ARIMA on prices and ARIMA on returns), with the order auto-selected by AIC, backtests both, and keeps whichever won. Across 56 assets, 36 went with the price model and 20 with the returns model, so both approaches are earning their place rather than one always winning.
 
 ---
 
@@ -169,7 +202,7 @@ A gap under 0.05 percentage points is recorded as **too close to call** rather t
 
 ### The result
 
-From `python -m src.ml.lens_report`:
+From `python -m src.ml.lens_report`, run on 25 November 2026 with prices through that day. Every data refresh moves these numbers, so once the data updates nightly, rerun the report for current ones:
 
 ```
 Second forecasting lens: GRU against ARIMA on the same 30 held out days
@@ -244,19 +277,21 @@ The list lives in `config/universe.yaml`, so scaling up is a config change rathe
 - **Cross-currency beta is FX-inclusive.** Documented above. Fixing it properly needs FX rates snapped at market close, which the free feed doesn't provide.
 - **Risk tiers are relative to this universe.** They're quintiles, so "Very low risk" means "among the calmest fifth of the 56 assets here", not an absolute claim about the market.
 - **Cluster labels are heuristics.** Rules applied to centroids, ranked against each other. Reasonable and stable, but they're my interpretation of what the model found. The algorithm doesn't name anything.
-- **Tests cover the pure logic, not the full pipeline.** 31 tests on the risk metrics, the normalization layer, and the forecast uncertainty property: the places where a regression would fail silently rather than crash. Ingestion and the API are still verified by hand. `python -m pytest`
+- **Tests cover the logic, the API and the interface, not live ingestion.** 153 backend tests with pytest (144 in the fast suite, plus 9 slow ones that fit real ARIMA models or train the GRU) and 153 frontend tests with Vitest and Testing Library. They cover the risk metrics, normalisation, both forecasting lenses, storage, the pipeline's skip flags, the carousel, benchmark, forecast and health endpoints, and the interface components. Fetching from yfinance is still checked by hand, by running the pipeline and counting rows. `python -m pytest -m "not slow"` and `cd frontend && npm test`
 - **SQLite.** Fine for a single batch writer. Would need Postgres for concurrent access; the ORM is there specifically so that's a connection-string change.
 
 ---
 
 ## Stack
 
-Python 3.13 · yfinance · pandas · SQLAlchemy + SQLite · scikit-learn · statsmodels · FastAPI · React (Vite) · plain CSS
+Python 3.13 · yfinance · pandas · SQLAlchemy + SQLite · scikit-learn · statsmodels · PyTorch (optional, for the GRU) · FastAPI · React (Vite) · CSS Modules · pytest · Vitest + Testing Library
 
-No chart library: the price charts and the small volatility "pulse" lines under each carousel title are hand-written SVG, which meant I could make the forecast band and the hover readout behave exactly how I wanted.
+No chart library and no animation library: the price charts, the risk spread strips and the backtest race are hand-written SVG, and the motion is CSS transitions plus `requestAnimationFrame`. That meant I could make the forecast bands, the hover readouts and the replay behave exactly how I wanted.
 
 ---
 
 ## What I'd do next
 
-Tests first. Then Postgres and a scheduler, so ingestion actually runs nightly instead of when I remember. After that, the one place NLP genuinely belongs: summarising each company's business description into a sentence a beginner can use, which is a real text task, unlike the metric explainers.
+Deployment first: the API and the frontend hosted, with Postgres and a scheduler so ingestion actually runs nightly instead of when I remember.
+
+Then a Q&A layer: ask a question in plain English ("which bond funds held up best this year?") and get an answer built from the stored data, where every number is checked against the database before it's shown. It will be the one part of the app allowed to call out to the network at request time.

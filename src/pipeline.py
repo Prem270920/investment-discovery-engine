@@ -19,6 +19,7 @@ import time
 
 import yfinance as yf
 
+from src.config import LOG_LEVEL
 from src.ingestion.benchmarks import ingest_benchmarks
 from src.ml.compute_metrics import compute_and_store_metrics
 from src.processing.normalize import AssetValidationError, normalize_asset
@@ -34,7 +35,7 @@ from src.ml.compute_neural_forecasts import (
 from src.ml.compute_descriptions import compute_and_store_descriptions
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     datefmt="%H:%M:%S",
 )

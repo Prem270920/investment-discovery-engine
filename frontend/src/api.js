@@ -2,10 +2,17 @@
  * API client
  */
 
-const API_BASE = "http://localhost:8000";
+/**
+ * Where the API lives. In development the page comes from Vite on :5173 and
+ * the API runs separately on :8000. A production build is served by the API
+ * itself, so it calls the same address it was loaded from.
+ */
+export function apiBase() {
+  return import.meta.env.DEV ? "http://localhost:8000" : "";
+}
 
 async function request(path) {
-  const url = `${API_BASE}${path}`;
+  const url = `${apiBase()}${path}`;
   let response;
   try {
     response = await fetch(url);

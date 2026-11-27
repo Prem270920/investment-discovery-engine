@@ -8,7 +8,7 @@ Two tables:
 The Price.symbol -> Asset.symbol foreign key enforces referential integrity
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
@@ -33,6 +33,19 @@ GRU_LENS = "gru"
 
 # gru_status before any GRU stage has touched the row.
 GRU_NOT_RUN = "not_run"
+
+
+def utc_now() -> datetime:
+    """The current UTC time, stored without its timezone.
+
+    Computed timezone aware, in place of the deprecated datetime.utcnow, then
+    made naive so it matches what these DateTime columns always held. SQLite
+    drops the zone on write anyway; keeping values naive means a fresh value
+    and one read back compare cleanly, and the API keeps serialising them in
+    the same format.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 class Asset(Base):
     __tablename__ = "assets"
@@ -62,7 +75,7 @@ class Asset(Base):
     is_benchmark: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     last_updated: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     # ORM convenience: asset.prices gives all price bars for this asset.
     # cascade so deleting an asset cleans up its orphaned prices.
@@ -155,7 +168,7 @@ class ForecastMeta(Base):
     head_to_head_winner: Mapped[str | None] = mapped_column(String, nullable=True)  # 'arima' | 'gru' | 'too_close'
 
     computed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
     )
 
     asset: Mapped["Asset"] = relationship()
@@ -210,7 +223,7 @@ class AssetDescription(Base):
     summary_readability: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     computed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
     )
 
     asset: Mapped["Asset"] = relationship()
@@ -237,7 +250,7 @@ class AssetMetric(Base):
     risk_tier: Mapped[str | None] = mapped_column(String, nullable=True)
 
     computed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
     )
 
     asset: Mapped["Asset"] = relationship()

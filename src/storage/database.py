@@ -6,15 +6,15 @@ so migrating SQLite -> Postgres later is a ONE-LINE change to DATABASE_URL.
 That's the payoff of using SQLAlchemy as an ORM rather than hand-writing sqlite3 calls.
 """
 
-from pathlib import Path
-
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-DATA_DIR.mkdir(exist_ok=True)
-DATABASE_URL = f"sqlite:///{DATA_DIR / 'investments.db'}"
+from src.config import DATABASE_PATH
+
+# The file's folder may not exist yet on a fresh server or a new volume.
+DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 # The single knob to change for Postgres later
 # DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/investments"
