@@ -86,6 +86,17 @@ Settings come from environment variables, and none are needed to run locally:
 | `DISCOVERY_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`. An unknown value stops startup with a message. |
 | `DISCOVERY_DISABLE_TORCH` | unset | Set to `1` to run the pipeline without the GRU lens. |
 
+### Run with Docker
+
+The image builds the frontend, installs `requirements.txt` (no torch), and copies in the code, the cluster model and the database, so it serves exactly the data you built it with. Build it for `linux/amd64`, which is what most hosts run, including from an Apple Silicon Mac:
+
+```bash
+docker buildx build --platform linux/amd64 -t discovery-engine --load .
+docker run --rm --platform linux/amd64 -p 8000:8000 discovery-engine
+```
+
+Then open http://localhost:8000. The app listens on `$PORT` when the host sets one, and on 8000 otherwise. Torch isn't in the image, but the GRU lens still shows: its results were computed by the pipeline and are read from the database like everything else. To publish fresh data, run the pipeline and rebuild the image.
+
 ---
 
 ## How it fits together

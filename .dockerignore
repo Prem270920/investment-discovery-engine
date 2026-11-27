@@ -1,0 +1,46 @@
+# Keep the build context small and free of anything machine specific.
+# The Dockerfile copies named paths only; this stops the rest being sent.
+
+# Environments and dependencies, rebuilt inside the image
+venv/
+.venv/
+**/node_modules/
+
+# A local build would be stale; stage 1 builds the frontend fresh
+frontend/dist/
+
+# Version control
+.git/
+.gitignore
+
+# Caches
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+frontend/.vite/
+.eslintcache
+
+# Test output
+coverage/
+htmlcov/
+.coverage
+test-results/
+junit*.xml
+
+# Scratch files and logs
+*.log
+*.tmp
+*.swp
+*~
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Editors, OS and secrets
+.vscode/
+.idea/
+.DS_Store
+.env
+*.env
